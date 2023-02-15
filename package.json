@@ -1,12 +1,12 @@
 {
-  "name": "@jsonic/jsonc",
+  "name": "@jsonic/ini",
   "version": "0.1.1",
-  "description": "This plugin allows the [Jsonic](https://jsonic.senecajs.org) JSON parser to support JSONC syntax.",
-  "main": "jsonc.js",
+  "description": "This plugin allows the [Jsonic](https://jsonic.senecajs.org) JSON parser to support INI syntax.",
+  "main": "ini.js",
   "type": "commonjs",
-  "browser": "jsonc.min.js",
-  "types": "jsonc.d.ts",
-  "homepage": "https://github.com/jsonicjs/jsonc",
+  "browser": "ini.min.js",
+  "types": "ini.d.ts",
+  "homepage": "https://github.com/jsonicjs/ini",
   "keywords": [
     "pattern",
     "matcher",
@@ -17,14 +17,14 @@
   "author": "Richard Rodger (http://richardrodger.com)",
   "repository": {
     "type": "git",
-    "url": "git://github.com/jsonicjs/jsonc.git"
+    "url": "git://github.com/jsonicjs/ini.git"
   },
   "scripts": {
     "test": "jest --coverage",
     "test-some": "jest -t",
     "test-watch": "jest --coverage --watchAll",
     "watch": "tsc -w -d",
-    "build": "tsc -d && cp jsonc.js jsonc.min.js && browserify -o jsonc.min.js -e jsonc.js -s @JsonicJsonc -im -i assert -p tinyify",
+    "build": "tsc -d && cp ini.js ini.min.js && browserify -o ini.min.js -e ini.js -s @JsonicIni -im -i assert -p tinyify",
     "prettier": "prettier --write --no-semi --single-quote *.ts test/*.js",
     "clean": "rm -rf node_modules yarn.lock package-lock.json",
     "reset": "npm run clean && npm i && npm run build && npm test",
@@ -42,15 +42,16 @@
   "devDependencies": {
     "@types/jest": "^29.4.0",
     "browserify": "^17.0.0",
+    "es-jest": "^2.1.0",
+    "esbuild": "^0.17.8",
     "jest": "^29.4.3",
     "prettier": "^2.8.4",
     "tinyify": "^4.0.0",
     "typescript": "^4.9.5",
-    "es-jest": "^2.1.0",
-    "esbuild": "^0.17.8"
+    "ini": "^3.0.1"
   },
-  "dependencies": {},
   "peerDependencies": {
-    "@jsonic/jsonic-next": ">=2.7.0"
+    "@jsonic/jsonic-next": ">=2.7.0",
+    "@jsonic/hoover": ">=0.1.2"
   }
 }
