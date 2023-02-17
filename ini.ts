@@ -1,7 +1,7 @@
 /* Copyright (c) 2021-2023 Richard Rodger, MIT License */
 
 // Import Jsonic types used by plugin.
-import { Jsonic, Rule, RuleSpec, NormAltSpec } from '@jsonic/jsonic-next'
+import { Jsonic, Rule, RuleSpec, NormAltSpec, Lex } from '@jsonic/jsonic-next'
 import { Hoover } from '@jsonic/hoover'
 
 type IniOptions = {
@@ -89,9 +89,6 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
     },
     lex: {
       emptyResult: {},
-      // match: {
-      //   line: { order: 9e6 }
-      // }
     },
     fixed: {
       token: {
@@ -103,6 +100,13 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
       },
     },
 
+    line: {
+      check: (lex: Lex) => {
+        if ('val' === lex.ctx.rule.name) {
+          return { done: true, token: undefined }
+        }
+      }
+    },
     number: {
       lex: false
     },
@@ -280,7 +284,6 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           s: [[OS, CS]],
           r: 'val',
           u: { ini_prev: true },
-          // a: (r) => r.use.hoover = r.o0.src
         },
 
         { s: [ZZ], a: (r) => r.node = '' },

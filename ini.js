@@ -82,9 +82,6 @@ function Ini(jsonic, options) {
         },
         lex: {
             emptyResult: {},
-            // match: {
-            //   line: { order: 9e6 }
-            // }
         },
         fixed: {
             token: {
@@ -94,6 +91,13 @@ function Ini(jsonic, options) {
                 '#CB': null,
                 '#CL': null,
             },
+        },
+        line: {
+            check: (lex) => {
+                if ('val' === lex.ctx.rule.name) {
+                    return { done: true, token: undefined };
+                }
+            }
         },
         number: {
             lex: false
@@ -251,7 +255,6 @@ function Ini(jsonic, options) {
                 s: [[OS, CS]],
                 r: 'val',
                 u: { ini_prev: true },
-                // a: (r) => r.use.hoover = r.o0.src
             },
             { s: [ZZ], a: (r) => r.node = '' },
         ], {

@@ -51,7 +51,7 @@
     "ini": "^3.0.1"
   },
   "peerDependencies": {
-    "@jsonic/jsonic-next": ">=2.7.0",
-    "@jsonic/hoover": ">=0.1.2"
+    "@jsonic/jsonic-next": ">=2.8.0",
+    "@jsonic/hoover": ">=0.2.0"
   }
 }
