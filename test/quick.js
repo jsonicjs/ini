@@ -7,14 +7,14 @@ const { Debug } = require('@jsonic/jsonic-next/debug')
 
 const { Ini } = require('..')
 
-const j = Jsonic.make()
-      .use(Debug, { trace: true })
-  .use(Ini, {})
+const j = Jsonic.make().use(Debug, { trace: true }).use(Ini, {})
 
-console.dir(j(`
+console.dir(
+  j(`
 a=1
 
-`))
+`)
+)
 
 // console.dir(j(`
 // ; comment
@@ -34,7 +34,6 @@ a=1
 // qq='Q'
 // "[]"='[]'
 // `))
-
 
 // console.dir(j(`
 // a0=0
@@ -105,4 +104,3 @@ bb = '1'
 */
 
 console.log(ini.decode(`=1`))
-

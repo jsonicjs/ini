@@ -6,20 +6,20 @@ const hoover_1 = require("@jsonic/hoover");
 function Ini(jsonic, options) {
     jsonic.use(hoover_1.Hoover, {
         lex: {
-            order: 8.5e6
+            order: 8.5e6,
         },
         block: {
             endofline: {
                 start: {
                     rule: {
                         parent: {
-                            include: ['pair', 'elem']
+                            include: ['pair', 'elem'],
                         },
-                    }
+                    },
                 },
                 end: {
                     fixed: ['\n', '\r\n', '#', ';', ''],
-                    consume: ['\n', '\r\n']
+                    consume: ['\n', '\r\n'],
                 },
                 escapeChar: '\\',
                 escape: {
@@ -35,14 +35,14 @@ function Ini(jsonic, options) {
                 start: {
                     rule: {
                         current: {
-                            exclude: ['dive']
+                            exclude: ['dive'],
                         },
-                        state: 'oc'
-                    }
+                        state: 'oc',
+                    },
                 },
                 end: {
                     fixed: ['=', '\n', '\r\n', '#', ';', ''],
-                    consume: false
+                    consume: false,
                 },
                 escape: {
                     '#': '#',
@@ -56,13 +56,13 @@ function Ini(jsonic, options) {
                 start: {
                     rule: {
                         current: {
-                            include: ['dive']
+                            include: ['dive'],
                         },
-                    }
+                    },
                 },
                 end: {
                     fixed: [']', '.'],
-                    consume: false
+                    consume: false,
                 },
                 escapeChar: '\\',
                 escape: {
@@ -72,7 +72,7 @@ function Ini(jsonic, options) {
                 },
                 allowUnknownEscape: true,
                 trim: true,
-            }
+            },
         },
     });
     jsonic.options({
@@ -97,18 +97,18 @@ function Ini(jsonic, options) {
                 if ('val' === lex.ctx.rule.name) {
                     return { done: true, token: undefined };
                 }
-            }
+            },
         },
         number: {
-            lex: false
+            lex: false,
         },
         string: {
             lex: true,
             chars: `'"`,
-            abandon: true
+            abandon: true,
         },
         text: {
-            lex: false
+            lex: false,
         },
         comment: {
             def: {
@@ -132,13 +132,12 @@ function Ini(jsonic, options) {
         ]);
     });
     jsonic.rule('table', (rs) => {
-        rs
-            .bo((r) => {
+        rs.bo((r) => {
             r.node = r.parent.node;
             if (r.prev.use.dive) {
                 let dive = r.prev.use.dive;
                 for (let dI = 0; dI < dive.length; dI++) {
-                    r.node = r.node[dive[dI]] = (r.node[dive[dI]] || {});
+                    r.node = r.node[dive[dI]] = r.node[dive[dI]] || {};
                 }
             }
         })
@@ -154,51 +153,43 @@ function Ini(jsonic, options) {
         })
             .close([
             { s: [OS], r: 'table', b: 1 },
-            { s: [CS], r: 'table', a: (r) => r.use.dive = r.child.use.dive },
+            { s: [CS], r: 'table', a: (r) => (r.use.dive = r.child.use.dive) },
             { s: [ZZ] },
         ]);
     });
     // TODO: maybe backport this to toml?
     jsonic.rule('dive', (rs) => {
-        rs
-            .open([
+        rs.open([
             {
                 s: [DK, DOT],
                 a: (r) => (r.use.dive = r.parent.use.dive || []).push(r.o0.val),
-                p: 'dive'
+                p: 'dive',
             },
             {
                 s: [DK],
-                a: (r) => (r.use.dive = r.parent.use.dive || []).push(r.o0.val)
-            }
-        ])
-            .close([{ s: [CS], b: 1 }]);
+                a: (r) => (r.use.dive = r.parent.use.dive || []).push(r.o0.val),
+            },
+        ]).close([{ s: [CS], b: 1 }]);
     });
     jsonic.rule('map', (rs) => {
-        rs
-            .open([
+        rs.open([
             // Pair from implicit map.
             {
                 s: [KEY, EQ],
                 c: (r) => 'table' === r.parent.name,
                 p: 'pair',
-                b: 2
+                b: 2,
             },
             {
                 s: [KEY],
                 c: (r) => 'table' === r.parent.name,
                 p: 'pair',
-                b: 1
+                b: 1,
             },
-        ], { append: true })
-            .close([
-            { s: [OS], b: 1 },
-            { s: [ZZ] }
-        ]);
+        ], { append: true }).close([{ s: [OS], b: 1 }, { s: [ZZ] }]);
     });
     jsonic.rule('pair', (rs) => {
-        rs
-            .open([
+        rs.open([
             {
                 s: [KEY, EQ],
                 c: (r) => 'table' === r.parent.parent.name,
@@ -212,15 +203,17 @@ function Ini(jsonic, options) {
                         r.use.key = key;
                         if (2 < key.length && key.endsWith('[]')) {
                             key = r.use.key = key.slice(0, -2);
-                            r.node[key] = r.use.ini_array =
-                                Array.isArray(r.node[key]) ? r.node[key] :
-                                    (undefined === r.node[key] ? [] : [r.node[key]]);
+                            r.node[key] = r.use.ini_array = Array.isArray(r.node[key])
+                                ? r.node[key]
+                                : undefined === r.node[key]
+                                    ? []
+                                    : [r.node[key]];
                         }
                         else {
                             r.use.pair = true;
                         }
                     }
-                }
+                },
             },
             // Special case: key by itself means key=true
             {
@@ -231,7 +224,7 @@ function Ini(jsonic, options) {
                     if ('string' === typeof key && 0 < key.length) {
                         r.parent.node[key] = true;
                     }
-                }
+                },
             },
         ])
             .close([
@@ -240,15 +233,14 @@ function Ini(jsonic, options) {
                 c: (r) => 'table' === r.parent.parent.name,
                 e: (r) => {
                     return r.c1;
-                }
+                },
             },
             { s: [KEY], b: 1, r: 'pair' },
             { s: [OS], b: 1 },
         ]);
     });
     jsonic.rule('val', (rs) => {
-        rs
-            .open([
+        rs.open([
             // Since OS,CS are fixed tokens, concat them with string value
             // if they appear as first char in a RHS value.
             {
@@ -256,11 +248,10 @@ function Ini(jsonic, options) {
                 r: 'val',
                 u: { ini_prev: true },
             },
-            { s: [ZZ], a: (r) => r.node = '' },
+            { s: [ZZ], a: (r) => (r.node = '') },
         ], {
-            custom: (alts) => alts.filter((alt) => alt.g.join() !== 'json,list')
-        })
-            .ac((r) => {
+            custom: (alts) => alts.filter((alt) => alt.g.join() !== 'json,list'),
+        }).ac((r) => {
             if (ST === r.o0.tin && "'" === r.o0.src[0]) {
                 try {
                     r.node = JSON.parse(r.node);
