@@ -11,9 +11,13 @@ const j = Jsonic.make().use(Ini)
 describe('ini', () => {
 
   test('happy', () => {
-    // TODO: should be a string!
-    expect(j('a=1')).toEqual({ a: 1 })
+    expect(j('a=1')).toEqual({ a: "1" })
+    expect(j('[A]')).toEqual({ A: {} })
+    expect(j(`[A.B]\nc='2'`)).toEqual({ A: { B: { c: 2 } } })
+    expect(j('a[]=1\na[]=2')).toEqual({ a: ['1', '2'] })
+    expect(j(';X\n#Y\na=1;2')).toEqual({ a: '1' })
   })
+
 
   test('basic', () => {
     expect(j(`
@@ -21,10 +25,15 @@ describe('ini', () => {
 a = 1
 b = x
 c = y y
-
+c0 = true 
+" c1  c2 " = null
+'[]'='[]'
 
 [d]
 e = 2
+e0[]=q q
+e0[]=w w
+"[]"="[]"
 
 [f]
 # x:11
@@ -34,32 +43,40 @@ g = 'G'
 
 [h.i]
 j = [3,4]
-k = true
+j0 = ]3,4[
+k = false
 
 [l.m.n.o]
 p = "P"
 q = {x:1}
 u = v = 5
-w = {y:{z:6}}
+w = '{"y":{"z":6}}'
 aa = 7
 
 `))
       .toEqual({
-        a: 1,
+        a: '1',
         b: 'x',
         c: 'y y',
-        d: { e: 2 },
+        c0: true,
+        ' c1  c2 ': null,
+        '[]': [],
+        d: {
+          e: '2',
+          e0: ['q q', 'w w'],
+          '[]': '[]',
+        },
         f: { g: 'G' },
-        h: { i: { j: [3, 4], k: 'true' } },
+        h: { i: { j: '[3,4]', j0: ']3,4[', k: false } },
         l: {
           m: {
             n: {
               o: {
                 p: 'P',
-                q: { x: 1 },
+                q: '{x:1}',
                 u: 'v = 5',
                 w: { y: { z: 6 } },
-                aa: 7
+                aa: '7'
               },
             }
           }
@@ -72,7 +89,7 @@ aa = 7
     expect(j(`
 o = p
 
-#FIX   a with spaces   =     b  c
+a with spaces   =     b  c
 
 ; wrap in quotes to JSON-decode and preserve spaces
 " xa  n          p " = "\\"\\r\\nyoyoyo\\r\\r\\n"
@@ -85,7 +102,7 @@ s = 'something'
 
 ; Test mixing quotes
 
-#FIX s1 = "something'
+s1 = "something'
 
 ; Test double quotes
 s2 = "something else"
@@ -118,9 +135,9 @@ null = null
 undefined = undefined
 
 ; Test arrays
-#FIX zr[] = deedee
-#FIX ar[] = one
-#FIX ar[] = three
+zr[] = deedee
+ar[] = one
+ar[] = three
 ; This should be included in the array
 ar   = this is included
 
@@ -133,13 +150,13 @@ eq = "eq=eq"
 ; a section
 [a]
 av = a val
-#FIX e = { o: p, a: { av: a val, b: { c: { e: "this [value]" } } } }
+e = { o: p, a: { av: a val, b: { c: { e: 'this [value]' } } } }
 #FIX j = "{ o: "p", a: { av: "a val", b: { c: { e: "this [value]" } } } }"
 "[]" = a square?
 
 ; Nested array
-#FIX cr[] = four
-#FIX cr[] = eight
+cr[] = four
+cr[] = eight
 
 ; nested child without middle parent
 ; should create otherwise-empty a.b
@@ -149,19 +166,19 @@ j = 2
 
 ; dots in the section name should be literally interpreted
 [x\\.y\\.z]
-#FIX x.y.z = xyz
+x.y.z = xyz
 
 [x\\.y\\.z.a\\.b\\.c]
-#FIX a.b.c = abc
+a.b.c = abc
 
 ; this next one is not a comment!  it's escaped!
-nocomment = this\; this is not a comment
+nocomment = this\\; this is not a comment
 
 # Support the use of the number sign (#) as an alternative to the semicolon for indicating comments.
 # http://en.wikipedia.org/wiki/INI_file#Comments
 
 # this next one is not a comment!  it's escaped!
-noHashComment = this\# this is not a comment`))
+noHashComment = this\\# this is not a comment`))
       .toEqual({
         " xa  n          p ": "\"\r\nyoyoyo\r\r\n",
         "[disturbing]": "hey you never know",
