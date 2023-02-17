@@ -10,7 +10,8 @@ describe('ini', () => {
         expect(j('[A]')).toEqual({ A: {} });
         expect(j(`[A.B]\nc='2'`)).toEqual({ A: { B: { c: 2 } } });
         expect(j('a[]=1\na[]=2')).toEqual({ a: ['1', '2'] });
-        expect(j(';X\n#Y\na=1;2')).toEqual({ a: '1' });
+        expect(j('a=\nb=')).toEqual({ a: '', b: '' });
+        expect(j(';X\n#Y\na=1;2\nb=2')).toEqual({ a: '1', b: '2' });
     });
     test('basic', () => {
         expect(j(`
@@ -143,7 +144,7 @@ eq = "eq=eq"
 [a]
 av = a val
 e = { o: p, a: { av: a val, b: { c: { e: 'this [value]' } } } }
-#FIX j = "{ o: "p", a: { av: "a val", b: { c: { e: "this [value]" } } } }"
+j = "{ o: \\"p\\", a: { av: \\"a val\\", b: { c: { e: \\"this [value]\\" } } } }"
 "[]" = a square?
 
 ; Nested array
@@ -188,7 +189,7 @@ noHashComment = this\\# this is not a comment`))
                     "eight",
                 ],
                 "e": "{ o: p, a: { av: a val, b: { c: { e: 'this [value]' } } } }",
-                "j": "\"{ o: \"p\", a: { av: \"a val\", b: { c: { e: \"this [value]\" } } } }\"",
+                "j": "{ o: \"p\", a: { av: \"a val\", b: { c: { e: \"this [value]\" } } } }",
             },
             "a with spaces": "b  c",
             "ar": [

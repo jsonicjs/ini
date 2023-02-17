@@ -12,8 +12,7 @@ const j = Jsonic.make()
   .use(Ini, {})
 
 console.dir(j(`
-a=
-b=
+a=1
 
 `))
 
@@ -105,7 +104,5 @@ bb = '1'
 `))
 */
 
-console.log(ini.decode(`
-a = 'a'
-`))
+console.log(ini.decode(`=1`))
 

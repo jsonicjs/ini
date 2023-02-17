@@ -1,7 +1,5 @@
 /* Copyright (c) 2021-2023 Richard Rodger, MIT License */
 
-DONT IGNORE NEWLINES, HANDLE EXPLICITLY
-
 // Import Jsonic types used by plugin.
 import { Jsonic, Rule, RuleSpec, NormAltSpec } from '@jsonic/jsonic-next'
 import { Hoover } from '@jsonic/hoover'
@@ -26,7 +24,8 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           }
         },
         end: {
-          fixed: ['\n', '\r\n', '#', ';', '']
+          fixed: ['\n', '\r\n', '#', ';', ''],
+          consume: ['\n', '\r\n']
         },
         escapeChar: '\\',
         escape: {
@@ -48,7 +47,8 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           }
         },
         end: {
-          fixed: ['=', '\n', '\r\n', '#', ';', '']
+          fixed: ['=', '\n', '\r\n', '#', ';', ''],
+          consume: false
         },
         escape: {
           '#': '#',
@@ -67,7 +67,8 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           }
         },
         end: {
-          fixed: [']', '.']
+          fixed: [']', '.'],
+          consume: false
         },
         escapeChar: '\\',
         escape: {
@@ -79,41 +80,7 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
         trim: true,
       }
     },
-    // action: (r: Rule) => {
-    //   r.o0.val = dequote(r.o0.val, true)
-    // }
   })
-
-
-  // function dequote(val: any, iskey: boolean) {
-  //   if (
-  //     'string' === typeof val && (
-  //       ("'" === val[0] && "'" === val[val.length - 1]) ||
-  //       ('"' === val[0] && '"' === val[val.length - 1])
-  //     )
-  //   ) {
-  //     if ("'" === val[0]) {
-  //       val = val.slice(1, -1)
-  //     }
-  //     try {
-  //       let json = JSON.parse(val)
-  //       if (iskey) {
-  //         if ('object' !== typeof json) {
-  //           val = json
-  //         }
-  //       }
-  //       else {
-  //         val = json
-  //       }
-  //     }
-  //     catch (e) {
-  //       // Invalid JSON, just accept val as given
-  //     }
-  //   }
-
-  //   return val
-  // }
-
 
   jsonic.options({
     rule: {
@@ -122,6 +89,9 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
     },
     lex: {
       emptyResult: {},
+      // match: {
+      //   line: { order: 9e6 }
+      // }
     },
     fixed: {
       token: {
@@ -147,9 +117,10 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
 
     comment: {
       def: {
+        hash: { eatline: true },
         slash: null,
         multi: null,
-        semi: { line: true, start: ';', lex: true },
+        semi: { line: true, start: ';', lex: true, eatline: true },
       },
     },
   })
@@ -231,13 +202,6 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
             b: 2
           },
 
-          // {
-          //   s: [KEY, OS],
-          //   c: (r) => 'table' === r.parent.name,
-          //   p: 'pair',
-          //   b: 2
-          // },
-
           {
             s: [KEY],
             c: (r) => 'table' === r.parent.name,
@@ -281,35 +245,18 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           }
         },
 
-        // {
-        //   s: [HK, OS],
-        //   c: (r) => 'table' === r.parent.parent.name,
-        //   r: 'pair',
-        //   a: (r) => {
-        //     let key = r.use.key = r.o0.val
-        //     r.node[key] = r.use.ini_array = Array.isArray(r.node[key]) ? r.node[key] :
-        //       (undefined === r.node[key] ? [] : r.node[key])
-        //   }
-        // },
-
-        // {
-        //   s: [CS, EQ],
-        //   c: (r) => r.use.ini_array = r.prev.use.ini_array,
-        //   p: 'val',
-        // },
-
+        // Special case: key by itself means key=true
         {
           s: [HK],
           c: (r) => 'table' === r.parent.parent.name,
-          a: (r) => r.parent.node[r.o0.val] = true
+          a: (r) => {
+            let key = r.o0.val
+            if ('string' === typeof key && 0 < key.length) {
+              r.parent.node[key] = true
+            }
+          }
         },
       ])
-
-      // .ao((r) => {
-      //   if ('string' === typeof r.use.key) {
-      //     r.use.key = dequote(r.use.key, true)
-      //   }
-      // })
 
       .close([
         {
@@ -334,7 +281,9 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           r: 'val',
           u: { ini_prev: true },
           // a: (r) => r.use.hoover = r.o0.src
-        }
+        },
+
+        { s: [ZZ], a: (r) => r.node = '' },
       ], {
         custom: (alts: NormAltSpec[]) =>
           alts.filter((alt: NormAltSpec) =>
