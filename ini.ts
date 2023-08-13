@@ -205,7 +205,7 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           b: 1,
         },
       ],
-      { append: true }
+      { append: true },
     ).close([{ s: [OS], b: 1 }, { s: [ZZ] }])
   })
 
@@ -246,8 +246,7 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
           }
         },
       },
-    ])
-    .close([
+    ]).close([
       {
         s: [KEY, CL],
         c: (r) => 'table' === r.parent.parent.name,
@@ -276,7 +275,7 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
       {
         custom: (alts: NormAltSpec[]) =>
           alts.filter((alt: NormAltSpec) => alt.g.join() !== 'json,list'),
-      }
+      },
     ).ac((r) => {
       if (ST === r.o0.tin && "'" === r.o0.src[0]) {
         try {

@@ -13,7 +13,7 @@ console.dir(
   j(`
 a=1
 
-`)
+`),
 )
 
 // console.dir(j(`

@@ -226,8 +226,7 @@ function Ini(jsonic, options) {
                     }
                 },
             },
-        ])
-            .close([
+        ]).close([
             {
                 s: [KEY, CL],
                 c: (r) => 'table' === r.parent.parent.name,
