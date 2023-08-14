@@ -1,6 +1,6 @@
 {
   "name": "@jsonic/ini",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "This plugin allows the [Jsonic](https://jsonic.senecajs.org) JSON parser to support INI syntax.",
   "main": "ini.js",
   "type": "commonjs",
@@ -24,6 +24,7 @@
     "test-some": "jest -t",
     "test-watch": "jest --coverage --watchAll",
     "watch": "tsc -w -d",
+    "doc": "jsonic-doc",
     "build": "tsc -d && cp ini.js ini.min.js && browserify -o ini.min.js -e ini.js -s @JsonicIni -im -i assert -p tinyify",
     "prettier": "prettier --write --no-semi --single-quote *.ts test/*.js",
     "clean": "rm -rf node_modules yarn.lock package-lock.json",
@@ -40,18 +41,19 @@
     "LICENSE"
   ],
   "devDependencies": {
+    "@jsonic/doc": "^0.0.7",
     "@types/jest": "^29.5.3",
     "browserify": "^17.0.0",
     "es-jest": "^2.1.0",
     "esbuild": "^0.19.1",
+    "ini": "^4.1.1",
     "jest": "^29.6.2",
     "prettier": "^3.0.1",
     "tinyify": "^4.0.0",
-    "typescript": "^5.1.6",
-    "ini": "^4.1.1"
+    "typescript": "^5.1.6"
   },
   "peerDependencies": {
-    "@jsonic/jsonic-next": ">=2.10.0",
-    "@jsonic/hoover": ">=0.3.1"
+    "@jsonic/hoover": ">=0.3.5",
+    "@jsonic/jsonic-next": ">=2.12.1"
   }
 }

@@ -1,15 +1,14 @@
 /* Copyright (c) 2021-2023 Richard Rodger, MIT License */
 
 // Import Jsonic types used by plugin.
-import { Jsonic, Rule, RuleSpec, NormAltSpec, Lex } from '@jsonic/jsonic-next'
+import { Jsonic, RuleSpec, NormAltSpec, Lex } from '@jsonic/jsonic-next'
 import { Hoover } from '@jsonic/hoover'
 
 type IniOptions = {
-  allowTrailingComma?: boolean
-  disallowComments?: boolean
 }
 
-function Ini(jsonic: Jsonic, options: IniOptions) {
+
+function Ini(jsonic: Jsonic, _options: IniOptions) {
   jsonic.use(Hoover, {
     lex: {
       order: 8.5e6,
@@ -148,8 +147,8 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
     rs.bo((r) => {
       r.node = r.parent.node
 
-      if (r.prev.use.dive) {
-        let dive = r.prev.use.dive
+      if (r.prev.u.dive) {
+        let dive = r.prev.u.dive
         for (let dI = 0; dI < dive.length; dI++) {
           r.node = r.node[dive[dI]] = r.node[dive[dI]] || {}
         }
@@ -167,7 +166,7 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
       })
       .close([
         { s: [OS], r: 'table', b: 1 },
-        { s: [CS], r: 'table', a: (r) => (r.use.dive = r.child.use.dive) },
+        { s: [CS], r: 'table', a: (r) => (r.u.dive = r.child.u.dive) },
         { s: [ZZ] },
       ])
   })
@@ -177,12 +176,12 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
     rs.open([
       {
         s: [DK, DOT],
-        a: (r) => (r.use.dive = r.parent.use.dive || []).push(r.o0.val),
+        a: (r) => (r.u.dive = r.parent.u.dive || []).push(r.o0.val),
         p: 'dive',
       },
       {
         s: [DK],
-        a: (r) => (r.use.dive = r.parent.use.dive || []).push(r.o0.val),
+        a: (r) => (r.u.dive = r.parent.u.dive || []).push(r.o0.val),
       },
     ]).close([{ s: [CS], b: 1 }])
   })
@@ -218,18 +217,18 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
         a: (r) => {
           let key = '' + r.o0.val
           if (Array.isArray(r.node[key])) {
-            r.use.ini_array = r.node[key]
+            r.u.ini_array = r.node[key]
           } else {
-            r.use.key = key
+            r.u.key = key
             if (2 < key.length && key.endsWith('[]')) {
-              key = r.use.key = key.slice(0, -2)
-              r.node[key] = r.use.ini_array = Array.isArray(r.node[key])
+              key = r.u.key = key.slice(0, -2)
+              r.node[key] = r.u.ini_array = Array.isArray(r.node[key])
                 ? r.node[key]
                 : undefined === r.node[key]
-                ? []
-                : [r.node[key]]
+                  ? []
+                  : [r.node[key]]
             } else {
-              r.use.pair = true
+              r.u.pair = true
             }
           }
         },
@@ -285,10 +284,10 @@ function Ini(jsonic: Jsonic, options: IniOptions) {
         }
       }
 
-      if (null != r.prev.use.ini_prev) {
+      if (null != r.prev.u.ini_prev) {
         r.prev.node = r.node = r.prev.o0.src + r.node
-      } else if (r.parent.use.ini_array) {
-        r.parent.use.ini_array.push(r.node)
+      } else if (r.parent.u.ini_array) {
+        r.parent.u.ini_array.push(r.node)
       }
     })
   })
