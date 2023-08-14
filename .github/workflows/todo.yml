@@ -4,9 +4,9 @@ jobs:
   build:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@master"
+      - uses: "actions/checkout@main"
       - name: "todo-to-issue"
-        uses: "senecajs/todo-to-issue-action@master"
+        uses: "senecajs/todo-to-issue-action@main"
         with:
           REPO: ${{ github.repository }}
           BEFORE: ${{ github.event.before }}
