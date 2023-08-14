@@ -4,6 +4,9 @@
 import { Jsonic, RuleSpec, NormAltSpec, Lex } from '@jsonic/jsonic-next'
 import { Hoover } from '@jsonic/hoover'
 
+// TODO: use a src folder
+
+
 type IniOptions = {}
 
 function Ini(jsonic: Jsonic, _options: IniOptions) {
@@ -223,8 +226,8 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
               r.node[key] = r.u.ini_array = Array.isArray(r.node[key])
                 ? r.node[key]
                 : undefined === r.node[key]
-                ? []
-                : [r.node[key]]
+                  ? []
+                  : [r.node[key]]
             } else {
               r.u.pair = true
             }
