@@ -6,7 +6,6 @@ import { Hoover } from '@jsonic/hoover'
 
 // TODO: use a src folder
 
-
 type IniOptions = {}
 
 function Ini(jsonic: Jsonic, _options: IniOptions) {

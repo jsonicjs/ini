@@ -1,7 +1,7 @@
 "use strict";
 /* Copyright (c) 2021-2023 Richard Rodger, MIT License */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Ini = void 0;
+exports.Ini = Ini;
 const hoover_1 = require("@jsonic/hoover");
 function Ini(jsonic, _options) {
     jsonic.use(hoover_1.Hoover, {
@@ -268,5 +268,4 @@ function Ini(jsonic, _options) {
         });
     });
 }
-exports.Ini = Ini;
 //# sourceMappingURL=ini.js.map
