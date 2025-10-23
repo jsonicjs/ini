@@ -1,7 +1,7 @@
-/* Copyright (c) 2021-2023 Richard Rodger, MIT License */
+/* Copyright (c) 2021-2025 Richard Rodger, MIT License */
 
 // Import Jsonic types used by plugin.
-import { Jsonic, RuleSpec, NormAltSpec, Lex } from '@jsonic/jsonic-next'
+import { Jsonic, RuleSpec, NormAltSpec, Lex } from 'jsonic'
 import { Hoover } from '@jsonic/hoover'
 
 // TODO: use a src folder

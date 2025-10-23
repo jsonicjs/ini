@@ -1,7 +1,7 @@
-/* Copyright (c) 2021-2023 Richard Rodger and other contributors, MIT License */
+/* Copyright (c) 2021-2025 Richard Rodger and other contributors, MIT License */
 
 
-import { Jsonic } from '@jsonic/jsonic-next'
+import { Jsonic } from 'jsonic'
 import { Ini } from '../ini'
 
 

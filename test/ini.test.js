@@ -1,9 +1,9 @@
 "use strict";
-/* Copyright (c) 2021-2023 Richard Rodger and other contributors, MIT License */
+/* Copyright (c) 2021-2025 Richard Rodger and other contributors, MIT License */
 Object.defineProperty(exports, "__esModule", { value: true });
-const jsonic_next_1 = require("@jsonic/jsonic-next");
+const jsonic_1 = require("jsonic");
 const ini_1 = require("../ini");
-const j = jsonic_next_1.Jsonic.make().use(ini_1.Ini);
+const j = jsonic_1.Jsonic.make().use(ini_1.Ini);
 describe('ini', () => {
     test('happy', () => {
         expect(j('a=1')).toEqual({ a: "1" });
