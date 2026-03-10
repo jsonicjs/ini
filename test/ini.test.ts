@@ -404,3 +404,85 @@ describe('section-duplicate', () => {
       .equal({ a: { b: { x: '1' }, y: '2' } })
   })
 })
+
+
+describe('number-lex', () => {
+
+  // Enable number lexing via post-config so Jsonic parses numeric values as numbers
+  function makeWithNumbers() {
+    const jn = Jsonic.make().use(Ini)
+    jn.options({ number: { lex: true } })
+    return jn
+  }
+
+  test('integers', () => {
+    const jn = makeWithNumbers()
+
+    expect(jn('a=1')).equal({ a: 1 })
+    expect(jn('a=0')).equal({ a: 0 })
+    expect(jn('a=-3')).equal({ a: -3 })
+    expect(jn('a=+2')).equal({ a: 2 })
+    expect(jn('a=42\nb=99')).equal({ a: 42, b: 99 })
+  })
+
+  test('floats', () => {
+    const jn = makeWithNumbers()
+
+    expect(jn('a=2.5')).equal({ a: 2.5 })
+    expect(jn('a=0.0')).equal({ a: 0 })
+    expect(jn('a=-1.25')).equal({ a: -1.25 })
+  })
+
+  test('scientific-notation', () => {
+    const jn = makeWithNumbers()
+
+    expect(jn('a=1e10')).equal({ a: 1e10 })
+  })
+
+  test('hex', () => {
+    const jn = makeWithNumbers()
+
+    expect(jn('a=0xFF')).equal({ a: 255 })
+  })
+
+  test('mixed-types', () => {
+    const jn = makeWithNumbers()
+
+    // Numbers and strings coexist
+    expect(jn('a=1\nb=hello\nc=2.5\nd=true'))
+      .equal({ a: 1, b: 'hello', c: 2.5, d: true })
+
+    // Non-numeric strings stay as strings
+    expect(jn('a=1abc')).equal({ a: '1abc' })
+
+    // Empty value stays as empty string
+    expect(jn('a=\nb=1')).equal({ a: '', b: 1 })
+  })
+
+  test('in-sections', () => {
+    const jn = makeWithNumbers()
+
+    expect(jn('[s]\na=42\nb=text'))
+      .equal({ s: { a: 42, b: 'text' } })
+
+    expect(jn('[s]\na=1\n[t]\nb=2'))
+      .equal({ s: { a: 1 }, t: { b: 2 } })
+  })
+
+  test('arrays', () => {
+    const jn = makeWithNumbers()
+
+    expect(jn('a[]=1\na[]=2\na[]=hello'))
+      .equal({ a: [1, 2, 'hello'] })
+  })
+
+  test('default-numbers-are-strings', () => {
+    // Without number.lex, all values are strings
+    const j = Jsonic.make().use(Ini)
+
+    expect(j('a=1')).equal({ a: '1' })
+    expect(j('a=2.5')).equal({ a: '2.5' })
+    expect(j('a=-3')).equal({ a: '-3' })
+    expect(j('a=0xFF')).equal({ a: '0xFF' })
+  })
+})
