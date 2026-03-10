@@ -4,8 +4,6 @@
 import { Jsonic, RuleSpec, NormAltSpec, Lex } from 'jsonic'
 import { Hoover } from '@jsonic/hoover'
 
-// TODO: use a src folder
-
 type IniOptions = {}
 
 function Ini(jsonic: Jsonic, _options: IniOptions) {
@@ -171,7 +169,6 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
       ])
   })
 
-  // TODO: maybe backport this to toml?
   jsonic.rule('dive', (rs: RuleSpec) => {
     rs.open([
       {

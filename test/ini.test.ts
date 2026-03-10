@@ -1,8 +1,10 @@
 /* Copyright (c) 2021-2025 Richard Rodger and other contributors, MIT License */
 
+import { test, describe } from 'node:test'
+import { expect } from '@hapi/code'
 
 import { Jsonic } from 'jsonic'
-import { Ini } from '../ini'
+import { Ini } from '../dist/ini'
 
 
 const j = Jsonic.make().use(Ini)
@@ -11,12 +13,12 @@ const j = Jsonic.make().use(Ini)
 describe('ini', () => {
 
   test('happy', () => {
-    expect(j('a=1')).toEqual({ a: "1" })
-    expect(j('[A]')).toEqual({ A: {} })
-    expect(j(`[A.B]\nc='2'`)).toEqual({ A: { B: { c: 2 } } })
-    expect(j('a[]=1\na[]=2')).toEqual({ a: ['1', '2'] })
-    expect(j('a=\nb=')).toEqual({ a: '', b: '' })
-    expect(j(';X\n#Y\na=1;2\nb=2')).toEqual({ a: '1', b: '2' })
+    expect(j('a=1')).equal({ a: "1" })
+    expect(j('[A]')).equal({ A: {} })
+    expect(j(`[A.B]\nc='2'`)).equal({ A: { B: { c: 2 } } })
+    expect(j('a[]=1\na[]=2')).equal({ a: ['1', '2'] })
+    expect(j('a=\nb=')).equal({ a: '', b: '' })
+    expect(j(';X\n#Y\na=1;2\nb=2')).equal({ a: '1', b: '2' })
   })
 
 
@@ -26,7 +28,7 @@ describe('ini', () => {
 a = 1
 b = x
 c = y y
-c0 = true 
+c0 = true
 " c1  c2 " = null
 '[]'='[]'
 
@@ -55,7 +57,7 @@ w = '{"y":{"z":6}}'
 aa = 7
 
 `))
-      .toEqual({
+      .equal({
         a: '1',
         b: 'x',
         c: 'y y',
@@ -112,7 +114,7 @@ s2 = "something else"
 s3 =
 
 ; Test value with only spaces
-s4 =        
+s4 =
 
 ; Test quoted value with only spaces
 s5 = '   '
@@ -180,7 +182,7 @@ nocomment = this\\; this is not a comment
 
 # this next one is not a comment!  it's escaped!
 noHashComment = this\\# this is not a comment`))
-      .toEqual({
+      .equal({
         " xa  n          p ": "\"\r\nyoyoyo\r\r\n",
         "[disturbing]": "hey you never know",
         "a": {
@@ -236,5 +238,3 @@ noHashComment = this\\# this is not a comment`))
 
 
 })
-
-
