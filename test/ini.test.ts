@@ -18,7 +18,8 @@ describe('ini', () => {
     expect(j(`[A.B]\nc='2'`)).equal({ A: { B: { c: 2 } } })
     expect(j('a[]=1\na[]=2')).equal({ a: ['1', '2'] })
     expect(j('a=\nb=')).equal({ a: '', b: '' })
-    expect(j(';X\n#Y\na=1;2\nb=2')).equal({ a: '1', b: '2' })
+    // Inline comments are off by default; ; and # mid-value are literal.
+    expect(j(';X\n#Y\na=1;2\nb=2')).equal({ a: '1;2', b: '2' })
   })
 
 
@@ -225,8 +226,8 @@ noHashComment = this\\# this is not a comment`))
         "x.y.z": {
           "a.b.c": {
             "a.b.c": "abc",
-            "nocomment": "this; this is not a comment",
-            "noHashComment": "this# this is not a comment",
+            "nocomment": "this\\; this is not a comment",
+            "noHashComment": "this\\# this is not a comment",
           },
           "x.y.z": "xyz",
         },
@@ -269,9 +270,9 @@ describe('multiline', () => {
     // Empty value with continuation
     expect(jm('a = \\\nworld')).equal({ a: 'world' })
 
-    // Comment after continuation value
-    expect(jm('a = hello \\\nworld ;comment\nb = 2'))
-      .equal({ a: 'hello world', b: '2' })
+    // Inline comments off by default: ; is literal in value
+    expect(jm('a = hello \\\nworld ;not-a-comment\nb = 2'))
+      .equal({ a: 'hello world ;not-a-comment', b: '2' })
   })
 
   test('indent-continuation', () => {
@@ -314,7 +315,11 @@ describe('multiline', () => {
   })
 
   test('multiline-escapes', () => {
-    const jm = Jsonic.make().use(Ini, { multiline: true })
+    // Multiline with inline comments active and backslash escaping
+    const jm = Jsonic.make().use(Ini, {
+      multiline: true,
+      comment: { inline: { active: true, escape: { backslash: true } } },
+    })
 
     // Escaped comment chars still work with continuation
     expect(jm('a = one\\; two \\\nthree'))
@@ -322,6 +327,17 @@ describe('multiline', () => {
 
     // Escaped hash
     expect(jm('a = one\\# two \\\nthree'))
+      .equal({ a: 'one# two three' })
+  })
+
+  test('multiline-no-inline-comments', () => {
+    // Multiline without inline comments: ; and # are literal
+    const jm = Jsonic.make().use(Ini, { multiline: true })
+
+    expect(jm('a = one; two \\\nthree'))
+      .equal({ a: 'one; two three' })
+
+    expect(jm('a = one# two \\\nthree'))
       .equal({ a: 'one# two three' })
   })
 })
@@ -402,6 +418,147 @@ describe('section-duplicate', () => {
     // [a.b] creates intermediate [a] but does not declare it
     expect(je('[a.b]\nx=1\n[a]\ny=2'))
       .equal({ a: { b: { x: '1' }, y: '2' } })
+  })
+})
+
+
+describe('inline-comment', () => {
+
+  test('off-by-default', () => {
+    // Default: inline comments are off. ; and # mid-value are literal.
+    const j = Jsonic.make().use(Ini)
+
+    expect(j('a = hello ; world')).equal({ a: 'hello ; world' })
+    expect(j('a = hello # world')).equal({ a: 'hello # world' })
+    expect(j('a = x;y;z')).equal({ a: 'x;y;z' })
+
+    // Line-start comments still work
+    expect(j('; comment\na = 1')).equal({ a: '1' })
+    expect(j('# comment\na = 1')).equal({ a: '1' })
+  })
+
+  test('active-basic', () => {
+    // Inline comments active with defaults (chars: ['#', ';'])
+    const j = Jsonic.make().use(Ini, {
+      comment: { inline: { active: true } },
+    })
+
+    expect(j('a = hello ; comment')).equal({ a: 'hello' })
+    expect(j('a = hello # comment')).equal({ a: 'hello' })
+    expect(j('a = x;y')).equal({ a: 'x' })
+    expect(j('a = value\nb = other')).equal({ a: 'value', b: 'other' })
+  })
+
+  test('custom-chars', () => {
+    // Only ; is an inline comment char, not #
+    const j = Jsonic.make().use(Ini, {
+      comment: { inline: { active: true, chars: [';'] } },
+    })
+
+    expect(j('a = hello ; comment')).equal({ a: 'hello' })
+    expect(j('a = hello # not a comment')).equal({ a: 'hello # not a comment' })
+  })
+
+  test('backslash-escape', () => {
+    // Backslash escaping enabled (default when active)
+    const j = Jsonic.make().use(Ini, {
+      comment: { inline: { active: true, escape: { backslash: true } } },
+    })
+
+    expect(j('a = hello\\; world')).equal({ a: 'hello; world' })
+    expect(j('a = hello\\# world')).equal({ a: 'hello# world' })
+    expect(j('a = x\\;y ; comment')).equal({ a: 'x;y' })
+  })
+
+  test('backslash-escape-disabled', () => {
+    // Backslash escaping explicitly disabled: \; keeps both chars but
+    // the escapeChar still prevents ; from terminating. The difference
+    // is that backslash is preserved in the output rather than consumed.
+    const j = Jsonic.make().use(Ini, {
+      comment: { inline: { active: true, escape: { backslash: false } } },
+    })
+
+    // \; → \; (backslash preserved, ; did not terminate)
+    expect(j('a = hello\\; world')).equal({ a: 'hello\\; world' })
+
+    // Unescaped ; still terminates
+    expect(j('a = hello ; comment')).equal({ a: 'hello' })
+  })
+
+  test('whitespace-prefix', () => {
+    // Whitespace-prefix mode: only treat as comment if preceded by whitespace
+    const j = Jsonic.make().use(Ini, {
+      comment: { inline: { active: true, escape: { whitespace: true } } },
+    })
+
+    // No whitespace before ;  →  literal
+    expect(j('a = x;y;z')).equal({ a: 'x;y;z' })
+
+    // Whitespace before ;  →  inline comment
+    expect(j('a = hello ;comment')).equal({ a: 'hello' })
+    expect(j('a = hello\t;comment')).equal({ a: 'hello' })
+
+    // Same for #
+    expect(j('a = x#y')).equal({ a: 'x#y' })
+    expect(j('a = hello #comment')).equal({ a: 'hello' })
+  })
+
+  test('whitespace-prefix-with-backslash', () => {
+    // Both whitespace and backslash escaping
+    const j = Jsonic.make().use(Ini, {
+      comment: {
+        inline: {
+          active: true,
+          escape: { whitespace: true, backslash: true },
+        },
+      },
+    })
+
+    // No whitespace: literal
+    expect(j('a = x;y')).equal({ a: 'x;y' })
+
+    // Whitespace present: comment
+    expect(j('a = hello ;comment')).equal({ a: 'hello' })
+
+    // Backslash escape overrides whitespace: literal
+    expect(j('a = hello \\;not-a-comment')).equal({ a: 'hello ;not-a-comment' })
+  })
+
+  test('with-multiline', () => {
+    // Inline comments active + multiline continuation
+    const j = Jsonic.make().use(Ini, {
+      multiline: true,
+      comment: { inline: { active: true } },
+    })
+
+    // Comment terminates continued value
+    expect(j('a = hello \\\nworld ;comment\nb = 2'))
+      .equal({ a: 'hello world', b: '2' })
+
+    // Escaped comment char in multiline value
+    expect(j('a = hello\\; \\\nworld'))
+      .equal({ a: 'hello; world' })
+  })
+
+  test('with-sections', () => {
+    const j = Jsonic.make().use(Ini, {
+      comment: { inline: { active: true } },
+    })
+
+    expect(j('[s]\na = val ; comment\nb = other'))
+      .equal({ s: { a: 'val', b: 'other' } })
+  })
+
+  test('line-comments-always-work', () => {
+    // Line-start comments work regardless of inline comment setting
+    const jOff = Jsonic.make().use(Ini)
+    const jOn = Jsonic.make().use(Ini, {
+      comment: { inline: { active: true } },
+    })
+
+    const input = '; line comment\n# hash comment\na = 1'
+    expect(jOff(input)).equal({ a: '1' })
+    expect(jOn(input)).equal({ a: '1' })
   })
 })
 

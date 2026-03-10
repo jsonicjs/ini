@@ -4,6 +4,20 @@
 import { Jsonic, RuleSpec, NormAltSpec, Lex, makePoint, Token } from 'jsonic'
 import { Hoover } from '@jsonic/hoover'
 
+type InlineCommentOptions = {
+  // Whether inline comments are active. Default: false.
+  active?: boolean
+  // Characters that start an inline comment. Default: ['#', ';'].
+  chars?: string[]
+  // Escape mechanisms for literal comment characters in values.
+  escape?: {
+    // Allow \; and \# to produce literal ; and #. Default: true.
+    backslash?: boolean
+    // Require whitespace before comment char to trigger. Default: false.
+    whitespace?: boolean
+  }
+}
+
 type IniOptions = {
   multiline?: {
     // Character before newline indicating continuation. Default: '\\'.
@@ -20,9 +34,52 @@ type IniOptions = {
     // 'error':    throw when a previously declared section header appears again
     duplicate?: 'merge' | 'override' | 'error'
   }
+  comment?: {
+    // Control inline comment behavior. Default: inactive.
+    inline?: InlineCommentOptions
+  }
 }
 
 function Ini(jsonic: Jsonic, _options: IniOptions) {
+  // Resolve inline comment options.
+  const inlineComment = {
+    active: _options.comment?.inline?.active ?? false,
+    chars: _options.comment?.inline?.chars ?? ['#', ';'],
+    escape: {
+      backslash: _options.comment?.inline?.escape?.backslash ?? true,
+      whitespace: _options.comment?.inline?.escape?.whitespace ?? false,
+    },
+  }
+
+  // Build Hoover end.fixed arrays based on inline comment config.
+  // When active without whitespace mode, include comment chars as terminators.
+  // When whitespace mode is on, the custom value matcher handles detection instead.
+  const inlineCharsInFixed =
+    inlineComment.active && !inlineComment.escape.whitespace
+
+  const eolEndFixed: string[] = ['\n', '\r\n']
+  if (inlineCharsInFixed) {
+    eolEndFixed.push(...inlineComment.chars)
+  }
+  eolEndFixed.push('')
+
+  const keyEndFixed: string[] = ['=', '\n', '\r\n']
+  if (inlineCharsInFixed) {
+    keyEndFixed.push(...inlineComment.chars)
+  }
+  keyEndFixed.push('')
+
+  // Build escape maps. Always include '\\' -> '\\'.
+  // Add comment char escapes when inline comments are active with backslash escaping.
+  const eolEscape: Record<string, string> = { '\\': '\\' }
+  const keyEscape: Record<string, string> = { '\\': '\\' }
+  if (inlineComment.active && inlineComment.escape.backslash) {
+    for (const ch of inlineComment.chars) {
+      eolEscape[ch] = ch
+      keyEscape[ch] = ch
+    }
+  }
+
   jsonic.use(Hoover, {
     lex: {
       order: 8.5e6,
@@ -37,15 +94,12 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
           },
         },
         end: {
-          fixed: ['\n', '\r\n', '#', ';', ''],
+          fixed: eolEndFixed,
           consume: ['\n', '\r\n'],
         },
         escapeChar: '\\',
-        escape: {
-          '#': '#',
-          ';': ';',
-          '\\': '\\',
-        },
+        escape: eolEscape,
+        allowUnknownEscape: true,
         preserveEscapeChar: true,
         trim: true,
       },
@@ -60,14 +114,10 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
           },
         },
         end: {
-          fixed: ['=', '\n', '\r\n', '#', ';', ''],
+          fixed: keyEndFixed,
           consume: false,
         },
-        escape: {
-          '#': '#',
-          ';': ';',
-          '\\': '\\',
-        },
+        escape: keyEscape,
         trim: true,
       },
       divekey: {
@@ -142,16 +192,23 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
     },
   })
 
-  // Multiline value support via custom lex matcher.
-  // Newlines terminate values at the lex level (Hoover's endofline block),
-  // so continuation must be handled by a higher-priority lex matcher that
-  // replaces endofline in value contexts.
+  // Custom value lex matcher.
+  // Needed when: (a) multiline continuation is enabled, or
+  // (b) inline comments are active with whitespace-prefix detection.
+  // Runs at higher priority than Hoover's endofline block to intercept values.
   const multiline = true === _options.multiline ? {} : _options.multiline
-  if (multiline) {
-    const continuation: string | false =
-      multiline.continuation !== undefined ? multiline.continuation : '\\'
-    const indent = multiline.indent || false
+  const needCustomMatcher =
+    !!multiline || (inlineComment.active && inlineComment.escape.whitespace)
+
+  if (needCustomMatcher) {
+    const continuation: string | false = multiline
+      ? (multiline.continuation !== undefined ? multiline.continuation : '\\')
+      : false
+    const indent = multiline ? (multiline.indent || false) : false
     const HV_TIN = jsonic.token('#HV') as number
+
+    // Build a Set for fast comment char lookup in the matcher.
+    const commentCharSet = new Set(inlineComment.chars)
 
     jsonic.options({
       lex: {
@@ -182,8 +239,24 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
                 while (sI < src.length) {
                   let c = src[sI]
 
-                  // Check for comment characters (end value).
-                  if (c === '#' || c === ';') break
+                  // Check for inline comment characters (end value).
+                  if (inlineComment.active && commentCharSet.has(c)) {
+                    if (inlineComment.escape.whitespace) {
+                      // Only treat as comment if preceded by whitespace.
+                      if (
+                        chars.length > 0 &&
+                        (chars[chars.length - 1] === ' ' ||
+                          chars[chars.length - 1] === '\t')
+                      ) {
+                        break
+                      }
+                      // Not preceded by whitespace: treat as literal.
+                      chars.push(c)
+                      sI++; cI++
+                      continue
+                    }
+                    break
+                  }
 
                   // Check for backslash continuation before newline.
                   if (false !== continuation && c === continuation) {
@@ -233,10 +306,14 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
                     break
                   }
 
-                  // Handle escape sequences (same as Hoover endofline block).
+                  // Handle escape sequences.
                   if (c === '\\' && sI + 1 < src.length) {
                     let next = src[sI + 1]
-                    if (next === '#' || next === ';') {
+                    if (
+                      inlineComment.active &&
+                      inlineComment.escape.backslash &&
+                      commentCharSet.has(next)
+                    ) {
                       chars.push(next)
                       sI += 2; cI += 2
                       continue
@@ -462,4 +539,4 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
 
 export { Ini }
 
-export type { IniOptions }
+export type { IniOptions, InlineCommentOptions }
