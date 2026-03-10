@@ -238,3 +238,90 @@ noHashComment = this\\# this is not a comment`))
 
 
 })
+
+
+describe('multiline', () => {
+
+  test('backslash-continuation', () => {
+    const jm = Jsonic.make().use(Ini, { multiline: true })
+
+    // Basic continuation with \<LF>
+    expect(jm('a = hello \\\nworld')).equal({ a: 'hello world' })
+
+    // Continuation with leading whitespace on next line (consumed)
+    expect(jm('a = hello \\\n    world')).equal({ a: 'hello world' })
+
+    // Multiple continuations
+    expect(jm('a = one \\\ntwo \\\nthree')).equal({ a: 'one two three' })
+
+    // No continuation: normal newline ends value
+    expect(jm('a = hello\nb = world')).equal({ a: 'hello', b: 'world' })
+
+    // Continuation with \<CR><LF>
+    expect(jm('a = hello \\\r\nworld')).equal({ a: 'hello world' })
+
+    // Escaped backslash before newline is NOT continuation
+    expect(jm('a = path\\\\\nb = next')).equal({ a: 'path\\', b: 'next' })
+
+    // Continuation in a section
+    expect(jm('[s]\na = hello \\\n    world')).equal({ s: { a: 'hello world' } })
+
+    // Empty value with continuation
+    expect(jm('a = \\\nworld')).equal({ a: 'world' })
+
+    // Comment after continuation value
+    expect(jm('a = hello \\\nworld ;comment\nb = 2'))
+      .equal({ a: 'hello world', b: '2' })
+  })
+
+  test('indent-continuation', () => {
+    const ji = Jsonic.make().use(Ini, { multiline: { indent: true, continuation: false } })
+
+    // Indented line continues previous value
+    expect(ji('a = hello\n    world')).equal({ a: 'hello world' })
+
+    // Multiple indent continuations
+    expect(ji('a = line1\n  line2\n  line3')).equal({ a: 'line1 line2 line3' })
+
+    // Non-indented line is a new key
+    expect(ji('a = hello\nb = world')).equal({ a: 'hello', b: 'world' })
+
+    // Tab indent
+    expect(ji('a = hello\n\tworld')).equal({ a: 'hello world' })
+
+    // Indent continuation in section
+    expect(ji('[s]\na = hello\n    world'))
+      .equal({ s: { a: 'hello world' } })
+  })
+
+  test('multiline-with-boolean-option', () => {
+    // multiline: true enables defaults (backslash continuation, no indent)
+    const jm = Jsonic.make().use(Ini, { multiline: true })
+    expect(jm('a = hello \\\nworld')).equal({ a: 'hello world' })
+  })
+
+  test('multiline-both-modes', () => {
+    // Both continuation char and indent enabled
+    const jb = Jsonic.make().use(Ini, {
+      multiline: { continuation: '\\', indent: true }
+    })
+
+    // Backslash continuation works
+    expect(jb('a = hello \\\nworld')).equal({ a: 'hello world' })
+
+    // Indent continuation also works
+    expect(jb('a = hello\n    world')).equal({ a: 'hello world' })
+  })
+
+  test('multiline-escapes', () => {
+    const jm = Jsonic.make().use(Ini, { multiline: true })
+
+    // Escaped comment chars still work with continuation
+    expect(jm('a = one\\; two \\\nthree'))
+      .equal({ a: 'one; two three' })
+
+    // Escaped hash
+    expect(jm('a = one\\# two \\\nthree'))
+      .equal({ a: 'one# two three' })
+  })
+})

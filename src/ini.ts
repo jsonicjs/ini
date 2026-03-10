@@ -1,10 +1,19 @@
 /* Copyright (c) 2021-2025 Richard Rodger, MIT License */
 
 // Import Jsonic types used by plugin.
-import { Jsonic, RuleSpec, NormAltSpec, Lex } from 'jsonic'
+import { Jsonic, RuleSpec, NormAltSpec, Lex, makePoint, Token } from 'jsonic'
 import { Hoover } from '@jsonic/hoover'
 
-type IniOptions = {}
+type IniOptions = {
+  multiline?: {
+    // Character before newline indicating continuation. Default: '\\'.
+    // Set to false to disable backslash continuation.
+    continuation?: string | false
+    // When true, a continuation line must be indented (leading whitespace).
+    // Indented lines continue the previous value even without a continuation char.
+    indent?: boolean
+  } | boolean
+}
 
 function Ini(jsonic: Jsonic, _options: IniOptions) {
   jsonic.use(Hoover, {
@@ -125,6 +134,136 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
       },
     },
   })
+
+  // Multiline value support via custom lex matcher.
+  // Newlines terminate values at the lex level (Hoover's endofline block),
+  // so continuation must be handled by a higher-priority lex matcher that
+  // replaces endofline in value contexts.
+  const multiline = true === _options.multiline ? {} : _options.multiline
+  if (multiline) {
+    const continuation: string | false =
+      multiline.continuation !== undefined ? multiline.continuation : '\\'
+    const indent = multiline.indent || false
+    const HV_TIN = jsonic.token('#HV') as number
+
+    jsonic.options({
+      lex: {
+        match: {
+          multiline: {
+            // Lower order than Hoover (8.5e6) so this runs first.
+            order: 8.4e6,
+            make: () => {
+              return function multilineMatcher(lex: Lex): Token | undefined {
+                // Only match in value context during rule open state
+                // (same as Hoover endofline block, which defaults to state 'o').
+                let ctx = (lex as any).ctx
+                let parentName = ctx?.rule?.parent?.name
+                if (parentName !== 'pair' && parentName !== 'elem') {
+                  return undefined
+                }
+                if (ctx?.rule?.state !== 'o') {
+                  return undefined
+                }
+
+                let src = lex.src
+                let sI = lex.pnt.sI
+                let rI = lex.pnt.rI
+                let cI = lex.pnt.cI
+                let startI = sI
+                let chars: string[] = []
+
+                while (sI < src.length) {
+                  let c = src[sI]
+
+                  // Check for comment characters (end value).
+                  if (c === '#' || c === ';') break
+
+                  // Check for backslash continuation before newline.
+                  if (false !== continuation && c === continuation) {
+                    if (src[sI + 1] === '\n') {
+                      // \<LF> continuation
+                      sI += 2; rI++; cI = 0
+                      // Consume leading whitespace on continuation line.
+                      while (sI < src.length &&
+                        (src[sI] === ' ' || src[sI] === '\t')) {
+                        sI++; cI++
+                      }
+                      continue
+                    }
+                    if (src[sI + 1] === '\r' && src[sI + 2] === '\n') {
+                      // \<CR><LF> continuation
+                      sI += 3; rI++; cI = 0
+                      while (sI < src.length &&
+                        (src[sI] === ' ' || src[sI] === '\t')) {
+                        sI++; cI++
+                      }
+                      continue
+                    }
+                  }
+
+                  // Check for newline.
+                  if (c === '\n' || (c === '\r' && src[sI + 1] === '\n')) {
+                    // Indent continuation: next line starts with whitespace.
+                    if (indent) {
+                      let nextI = c === '\r' ? sI + 2 : sI + 1
+                      if (nextI < src.length &&
+                        (src[nextI] === ' ' || src[nextI] === '\t')) {
+                        rI++; cI = 0
+                        sI = nextI
+                        // Consume leading whitespace.
+                        while (sI < src.length &&
+                          (src[sI] === ' ' || src[sI] === '\t')) {
+                          sI++; cI++
+                        }
+                        chars.push(' ')
+                        continue
+                      }
+                    }
+
+                    // Normal newline: end value and consume the newline.
+                    if (c === '\r') { sI += 2 } else { sI++ }
+                    rI++; cI = 0
+                    break
+                  }
+
+                  // Handle escape sequences (same as Hoover endofline block).
+                  if (c === '\\' && sI + 1 < src.length) {
+                    let next = src[sI + 1]
+                    if (next === '#' || next === ';') {
+                      chars.push(next)
+                      sI += 2; cI += 2
+                      continue
+                    }
+                    if (next === '\\') {
+                      chars.push('\\')
+                      sI += 2; cI += 2
+                      continue
+                    }
+                  }
+
+                  chars.push(c)
+                  sI++; cI++
+                }
+
+                let val: string | undefined = chars.join('').trim()
+
+                let pnt = makePoint(lex.pnt.len, sI, rI, cI)
+                let tkn = lex.token(
+                  HV_TIN, val, src.substring(startI, sI), pnt)
+                tkn.use = { block: 'endofline' }
+
+                lex.pnt.sI = sI
+                lex.pnt.rI = rI
+                lex.pnt.cI = cI
+
+                return tkn
+              }
+            }
+          }
+        }
+      }
+    })
+  }
 
   const { ZZ, ST, VL, OS, CS, CL, EQ, DOT, HV, HK, DK } = jsonic.token
 
