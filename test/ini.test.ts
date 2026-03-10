@@ -325,3 +325,82 @@ describe('multiline', () => {
       .equal({ a: 'one# two three' })
   })
 })
+
+
+describe('section-duplicate', () => {
+
+  test('merge-default', () => {
+    const j = Jsonic.make().use(Ini)
+
+    // Default: merge keys from duplicate sections
+    expect(j('[a]\nx=1\ny=2\n[a]\nz=3'))
+      .equal({ a: { x: '1', y: '2', z: '3' } })
+
+    // Duplicate key: last value wins
+    expect(j('[a]\nx=1\n[a]\nx=2'))
+      .equal({ a: { x: '2' } })
+
+    // Nested duplicate sections merge
+    expect(j('[a.b]\nx=1\n[a.b]\ny=2'))
+      .equal({ a: { b: { x: '1', y: '2' } } })
+
+    // Intermediate path preserved when merging
+    expect(j('[a.b]\nx=1\n[a]\ny=2'))
+      .equal({ a: { b: { x: '1' }, y: '2' } })
+  })
+
+  test('merge-explicit', () => {
+    const jm = Jsonic.make().use(Ini, { section: { duplicate: 'merge' } })
+
+    expect(jm('[a]\nx=1\n[a]\ny=2'))
+      .equal({ a: { x: '1', y: '2' } })
+  })
+
+  test('override', () => {
+    const jo = Jsonic.make().use(Ini, { section: { duplicate: 'override' } })
+
+    // Second occurrence replaces first
+    expect(jo('[a]\nx=1\ny=2\n[a]\nz=3'))
+      .equal({ a: { z: '3' } })
+
+    // First occurrence works normally
+    expect(jo('[a]\nx=1'))
+      .equal({ a: { x: '1' } })
+
+    // Override clears subsections too
+    expect(jo('[a.b]\nx=1\n[a]\ny=2\n[a]\nz=3'))
+      .equal({ a: { z: '3' } })
+
+    // Non-duplicate sections unaffected
+    expect(jo('[a]\nx=1\n[b]\ny=2'))
+      .equal({ a: { x: '1' }, b: { y: '2' } })
+
+    // Nested override
+    expect(jo('[a.b]\nx=1\n[a.b]\ny=2'))
+      .equal({ a: { b: { y: '2' } } })
+  })
+
+  test('error', () => {
+    const je = Jsonic.make().use(Ini, { section: { duplicate: 'error' } })
+
+    // Single section: no error
+    expect(je('[a]\nx=1')).equal({ a: { x: '1' } })
+
+    // Multiple distinct sections: no error
+    expect(je('[a]\nx=1\n[b]\ny=2'))
+      .equal({ a: { x: '1' }, b: { y: '2' } })
+
+    // Duplicate section: throws
+    expect(() => je('[a]\nx=1\n[a]\ny=2'))
+      .to.throw(/Duplicate section/)
+
+    // Duplicate nested section: throws
+    expect(() => je('[a.b]\nx=1\n[a.b]\ny=2'))
+      .to.throw(/Duplicate section/)
+
+    // Intermediate path is NOT a declared section
+    // [a.b] creates intermediate [a] but does not declare it
+    expect(je('[a.b]\nx=1\n[a]\ny=2'))
+      .equal({ a: { b: { x: '1' }, y: '2' } })
+  })
+})

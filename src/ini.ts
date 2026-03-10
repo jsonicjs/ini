@@ -13,6 +13,13 @@ type IniOptions = {
     // Indented lines continue the previous value even without a continuation char.
     indent?: boolean
   } | boolean
+  section?: {
+    // How to handle duplicate section headers. Default: 'merge'.
+    // 'merge':    combine keys from all occurrences (last value wins for duplicate keys)
+    // 'override': last section occurrence replaces earlier ones entirely
+    // 'error':    throw when a previously declared section header appears again
+    duplicate?: 'merge' | 'override' | 'error'
+  }
 }
 
 function Ini(jsonic: Jsonic, _options: IniOptions) {
@@ -269,9 +276,16 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
 
   const KEY = [HK, ST, VL]
 
+  const dupSection = _options.section?.duplicate || 'merge'
+
+  // Track explicitly declared section paths per parse call.
+  // Cleared in the ini rule's bo handler, used in the table rule.
+  const declaredSections = new Set<string>()
+
   jsonic.rule('ini', (rs: RuleSpec) => {
     rs.bo((r) => {
       r.node = {}
+      declaredSections.clear()
     }).open([
       { s: [OS], p: 'table', b: 1 },
       { s: [KEY, EQ], p: 'table', b: 2 },
@@ -286,9 +300,26 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
 
       if (r.prev.u.dive) {
         let dive = r.prev.u.dive
-        for (let dI = 0; dI < dive.length; dI++) {
-          r.node = r.node[dive[dI]] = r.node[dive[dI]] || {}
+        // Use null char as separator to avoid collisions with dots in key names.
+        let sectionKey = dive.join('\x00')
+        let isDuplicate = declaredSections.has(sectionKey)
+
+        if (isDuplicate && dupSection === 'error') {
+          throw new Error(
+            'Duplicate section: [' + dive.join('.') + ']'
+          )
         }
+
+        for (let dI = 0; dI < dive.length; dI++) {
+          if (dI === dive.length - 1 && isDuplicate && dupSection === 'override') {
+            // Override: replace the section object entirely.
+            r.node = r.node[dive[dI]] = {}
+          } else {
+            r.node = r.node[dive[dI]] = r.node[dive[dI]] || {}
+          }
+        }
+
+        declaredSections.add(sectionKey)
       }
     })
       .open([
