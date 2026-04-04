@@ -42,7 +42,7 @@
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
-    "@jsonic/hoover": ">=0",
-    "jsonic": ">=2"
+    "@jsonic/hoover": "^0.8.0",
+    "jsonic": "^2.20.1"
   }
 }
