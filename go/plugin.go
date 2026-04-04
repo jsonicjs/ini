@@ -76,7 +76,7 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	// fixed tokens, etc.) so the built-in matchers can process them.
 
 	// Key matcher: reads a key token (until =, newline, [, ], or EOF).
-	j.AddMatcher("inikey", 100000, func(lex *jsonic.Lex) *jsonic.Token {
+	j.AddMatcher("inikey", 100000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if mode != modeKey {
 			return nil
 		}
@@ -157,7 +157,7 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	// Value matcher: reads a value token (until newline, comment, or EOF).
 	// Handles leading whitespace, multiline continuation, and inline comments.
 	// Also handles the empty-value case (newline/EOF immediately after =).
-	j.AddMatcher("inival", 100001, func(lex *jsonic.Lex) *jsonic.Token {
+	j.AddMatcher("inival", 100001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if mode != modeVal {
 			return nil
 		}
@@ -346,7 +346,7 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	})
 
 	// Dive key matcher: reads section path parts (until ] or .).
-	j.AddMatcher("inidive", 100002, func(lex *jsonic.Lex) *jsonic.Token {
+	j.AddMatcher("inidive", 100002, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if mode != modeDive {
 			return nil
 		}
