@@ -9,23 +9,9 @@ import (
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
-// lexMode tracks which kind of token the custom matchers should produce.
-// Set by grammar rule callbacks, read by matchers.
-type lexMode int
-
-const (
-	modeKey  lexMode = iota // Scanning a key (until = or newline)
-	modeVal                 // Scanning a value (until newline or comment)
-	modeDive                // Scanning section path part (until ] or .)
-	modeNone                // Don't produce custom tokens
-)
-
 // Ini is a jsonic plugin that adds INI parsing support.
 func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	opts := mapToResolved(pluginOpts)
-
-	// Closure state for context-dependent lexing.
-	mode := modeKey
 
 	cfg := j.Config()
 
@@ -75,15 +61,25 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	cfg.EnderChars['.'] = true
 
 	// ---- Custom Matchers ----
-	// All at priority < 2e6 so they run before built-in matchers.
-	// They must return nil for chars they don't handle (spaces, newlines,
-	// fixed tokens, etc.) so the built-in matchers can process them.
+	// Context is determined from the current rule (like TS Hoover), not
+	// from a mutable mode variable. This keeps the matchers stateless and
+	// lets the grammar file drive all rule definitions without Go-specific
+	// action wrappers.
 
 	// Key matcher: reads a key token (until =, newline, [, ], or EOF).
+	// Fires when the current rule is NOT "dive" and NOT in value context
+	// (parent rule is not "pair"), matching Hoover's key block conditions:
+	//   start.rule.current.exclude: ['dive'], state: 'oc'
 	j.AddMatcher("inikey", 100000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
-		if mode != modeKey {
-			return nil
+		if rule != nil {
+			if rule.Name == "dive" {
+				return nil
+			}
+			if rule.Parent != nil && rule.Parent.Name == "pair" {
+				return nil
+			}
 		}
+
 		pnt := lex.Cursor()
 		src := lex.Src
 		sI := pnt.SI
@@ -99,8 +95,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 			ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
 			return nil
 		}
-		// Pass [ unless it's part of key[] array syntax.
-		// At start of key, [ is a section opener.
 		if ch == '[' {
 			return nil
 		}
@@ -158,12 +152,14 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	})
 
 	// Value matcher: reads a value token (until newline, comment, or EOF).
-	// Handles leading whitespace, multiline continuation, and inline comments.
-	// Also handles the empty-value case (newline/EOF immediately after =).
+	// Fires when the parent rule is "pair" (value context), matching
+	// Hoover's endofline block condition: start.rule.parent.include: ['pair', 'elem']
 	j.AddMatcher("inival", 100001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
-		if mode != modeVal {
+		if rule == nil || rule.Parent == nil ||
+			(rule.Parent.Name != "pair" && rule.Parent.Name != "elem") {
 			return nil
 		}
+
 		pnt := lex.Cursor()
 		src := lex.Src
 		sI := pnt.SI
@@ -344,10 +340,13 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	})
 
 	// Dive key matcher: reads section path parts (until ] or .).
+	// Fires only when the current rule is "dive", matching Hoover's
+	// divekey block condition: start.rule.current.include: ['dive']
 	j.AddMatcher("inidive", 100002, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
-		if mode != modeDive {
+		if rule == nil || rule.Name != "dive" {
 			return nil
 		}
+
 		pnt := lex.Cursor()
 		src := lex.Src
 		sI := pnt.SI
@@ -395,8 +394,10 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	})
 
 	// ---- Grammar Rules ----
-	// Rules ini, table, dive, map, pair are loaded from ini-grammar.jsonic.
-	// The val rule is defined in Go code (needs custom logic not in the grammar file).
+	// Rules ini, table, dive, map, pair are loaded directly from
+	// ini-grammar.jsonic with no Go-specific modifications.
+	// The val rule is defined in Go code (needs custom open alts and
+	// complex AC handler not expressible in the grammar file).
 
 	var declaredSections map[string]bool
 
@@ -410,7 +411,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	}
 
 	// Action function refs (matching @ names in the grammar file).
-	// Go-specific mode switching is included in these functions.
 	actions := map[string]actionFunc{
 		"@table-close-dive": func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if r.Child != nil && r.Child != jsonic.NoRule {
@@ -418,7 +418,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 					r.U["dive"] = dive
 				}
 			}
-			mode = modeKey
 		},
 
 		"@dive-push": func(r *jsonic.Rule, ctx *jsonic.Context) {
@@ -432,7 +431,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 		},
 
 		"@pair-key-eq": func(r *jsonic.Rule, ctx *jsonic.Context) {
-			mode = modeVal
 			key := tokenString(r.O0)
 			nodeMap, _ := r.Node.(map[string]any)
 			if nodeMap == nil {
@@ -492,13 +490,8 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	// Parse and build grammar rules from the embedded jsonic file.
 	grammarRules := parseGrammarRules(tokenMap, actions, conds)
 
-	// Apply grammar rules with Go-specific state actions and mode switching.
-
-	// Go-specific: bare KEY alts needed because Go's custom key matcher
-	// produces HK tokens for bare keys (without =), unlike TS's Hoover.
-	KEY := []jsonic.Tin{HK, ST}
-	bareKeyToTable := &jsonic.AltSpec{S: [][]jsonic.Tin{KEY}, P: "table", B: 1}
-	bareKeyToMap := &jsonic.AltSpec{S: [][]jsonic.Tin{KEY}, P: "map", B: 1}
+	// Apply grammar rules. No Go-specific alt modifications needed —
+	// matchers use rule context (like TS Hoover) instead of a mode variable.
 
 	j.Rule("ini", func(rs *jsonic.RuleSpec) {
 		rs.Clear()
@@ -506,15 +499,12 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 		rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			r.Node = make(map[string]any)
 			declaredSections = make(map[string]bool)
-			mode = modeKey
 		})
 
 		if gr, ok := grammarRules["ini"]; ok {
 			rs.Open = gr.open
 			rs.Close = gr.close
 		}
-		// Insert bare KEY alt after KEY+EQ alt (index 1) for Go custom matchers.
-		rs.Open = insertAlt(rs.Open, 2, bareKeyToTable)
 	})
 
 	j.Rule("table", func(rs *jsonic.RuleSpec) {
@@ -522,7 +512,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 
 		rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			r.Node = r.Parent.Node
-			mode = modeKey
 
 			if r.Prev != nil && r.Prev != jsonic.NoRule {
 				if dive, ok := r.Prev.U["dive"].([]string); ok && len(dive) > 0 {
@@ -569,21 +558,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 			rs.Open = gr.open
 			rs.Close = gr.close
 		}
-		// Insert bare KEY alt after KEY+EQ alt (index 1) for Go custom matchers.
-		rs.Open = insertAlt(rs.Open, 2, bareKeyToMap)
-
-		// Go-specific: set mode=modeDive on the first open alt (OS → dive).
-		if len(rs.Open) > 0 {
-			rs.Open[0].A = wrapAction(rs.Open[0].A, func(r *jsonic.Rule, ctx *jsonic.Context) {
-				mode = modeDive
-			})
-		}
-		// Go-specific: set mode=modeKey on the first close alt (OS → table).
-		if len(rs.Close) > 0 {
-			rs.Close[0].A = wrapAction(rs.Close[0].A, func(r *jsonic.Rule, ctx *jsonic.Context) {
-				mode = modeKey
-			})
-		}
 	})
 
 	j.Rule("dive", func(rs *jsonic.RuleSpec) {
@@ -592,13 +566,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 		if gr, ok := grammarRules["dive"]; ok {
 			rs.Open = gr.open
 			rs.Close = gr.close
-		}
-
-		// Go-specific: set mode=modeKey on dive close (CS).
-		if len(rs.Close) > 0 {
-			rs.Close[0].A = wrapAction(rs.Close[0].A, func(r *jsonic.Rule, ctx *jsonic.Context) {
-				mode = modeKey
-			})
 		}
 	})
 
@@ -618,10 +585,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 			rs.Open = gr.open
 			rs.Close = gr.close
 		}
-
-		rs.AddAC(func(r *jsonic.Rule, ctx *jsonic.Context) {
-			mode = modeKey
-		})
 	})
 
 	// ---- val rule ----
@@ -652,8 +615,6 @@ func Ini(j *jsonic.Jsonic, pluginOpts map[string]any) {
 		}
 
 		rs.AddAC(func(r *jsonic.Rule, ctx *jsonic.Context) {
-			mode = modeKey
-
 			// Resolve value.
 			if jsonic.IsUndefined(r.Node) || r.Node == nil {
 				if r.O0 != nil && !r.O0.IsNoToken() {

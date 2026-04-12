@@ -166,24 +166,3 @@ func toInt(v any) int {
 	return 0
 }
 
-// insertAlt inserts an AltSpec at the given index in the slice.
-func insertAlt(alts []*jsonic.AltSpec, idx int, alt *jsonic.AltSpec) []*jsonic.AltSpec {
-	if idx >= len(alts) {
-		return append(alts, alt)
-	}
-	alts = append(alts, nil)
-	copy(alts[idx+1:], alts[idx:])
-	alts[idx] = alt
-	return alts
-}
-
-// wrapAction creates a new action that calls orig (if non-nil) then extra.
-func wrapAction(orig actionFunc, extra actionFunc) actionFunc {
-	if orig == nil {
-		return extra
-	}
-	return func(r *jsonic.Rule, ctx *jsonic.Context) {
-		orig(r, ctx)
-		extra(r, ctx)
-	}
-}
