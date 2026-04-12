@@ -152,25 +152,22 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	cfg.SortFixedTokens()
 
 	// Register custom fixed tokens.
-	EQ := j.Token("#EQ", "=")
-	DOT := j.Token("#DOT", ".")
+	j.Token("#EQ", "=")
+	j.Token("#DOT", ".")
 	cfg.SortFixedTokens()
 
-	// Register custom token types for INI-specific blocks.
+	// Register custom token types used by matchers.
 	HK := j.Token("#HK") // Hoover Key
 	HV := j.Token("#HV") // Hoover Value
 	DK := j.Token("#DK") // Dive Key (section path part)
-
-	// Standard tokens.
-	ZZ := j.Token("#ZZ")
+	ST := j.Token("#ST") // String
 	OS := j.Token("#OS") // [
 	CS := j.Token("#CS") // ]
-	ST := j.Token("#ST") // String
-	VL := j.Token("#VL") // Value
-	CL := j.Token("#CL") // Colon (disabled but needed for grammar file token resolution)
-	_ = DOT              // used by grammar
-	_ = VL               // used by grammar
-	_ = CL               // used by grammar
+	ZZ := j.Token("#ZZ")
+
+	// Ensure these exist for grammar file token resolution.
+	j.Token("#VL")
+	j.Token("#CL")
 
 	// Exclude default jsonic grammar rules.
 	j.Exclude("jsonic", "imp")
@@ -524,123 +521,24 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	})
 
 	// ---- Grammar Rules ----
-	// Rules ini, table, dive, map, pair are loaded directly from
-	// ini-grammar.jsonic with no Go-specific modifications.
+	// Rules ini, table, dive, map, pair are loaded from ini-grammar.jsonic
+	// via j.Grammar(), mirroring the TS approach. State actions use the
+	// @rulename-bo/bc/ac naming convention for auto-wiring.
 	// The val rule is defined in Go code (needs custom open alts and
 	// complex AC handler not expressible in the grammar file).
 
 	var declaredSections map[string]bool
 
-	// Token map for resolving grammar file token references.
-	tokenMap := map[string]jsonic.Tin{
-		"#HK": HK, "#HV": HV, "#DK": DK,
-		"#EQ": EQ, "#DOT": DOT,
-		"#OS": OS, "#CS": CS,
-		"#ST": ST, "#VL": VL, "#CL": CL,
-		"#ZZ": ZZ,
-	}
-
-	// Action function refs (matching @ names in the grammar file).
-	actions := map[string]actionFunc{
-		"@table-close-dive": func(r *jsonic.Rule, ctx *jsonic.Context) {
-			if r.Child != nil && r.Child != jsonic.NoRule {
-				if dive, ok := r.Child.U["dive"].([]string); ok {
-					r.U["dive"] = dive
-				}
-			}
-		},
-
-		"@dive-push": func(r *jsonic.Rule, ctx *jsonic.Context) {
-			dive := getDive(r.Parent)
-			val, _ := r.O0.Val.(string)
-			dive = append(dive, val)
-			r.U["dive"] = dive
-			if r.Parent != nil && r.Parent != jsonic.NoRule {
-				r.Parent.U["dive"] = dive
-			}
-		},
-
-		"@pair-key-eq": func(r *jsonic.Rule, ctx *jsonic.Context) {
-			key := tokenString(r.O0)
-			nodeMap, _ := r.Node.(map[string]any)
-			if nodeMap == nil {
-				return
-			}
-
-			if _, isArr := nodeMap[key].([]any); isArr {
-				r.U["ini_array"] = nodeMap[key]
-			} else if len(key) > 2 && strings.HasSuffix(key, "[]") {
-				arrayKey := key[:len(key)-2]
-				r.U["key"] = arrayKey
-				if existing, ok := nodeMap[arrayKey].([]any); ok {
-					r.U["ini_array"] = existing
-				} else if _, exists := nodeMap[arrayKey]; exists {
-					r.U["ini_array"] = []any{nodeMap[arrayKey]}
-					nodeMap[arrayKey] = r.U["ini_array"]
-				} else {
-					arr := make([]any, 0)
-					nodeMap[arrayKey] = arr
-					r.U["ini_array"] = arr
-				}
-			} else {
-				r.U["key"] = key
-				r.U["pair"] = true
-			}
-		},
-
-		"@pair-key-bool": func(r *jsonic.Rule, ctx *jsonic.Context) {
-			key := tokenString(r.O0)
-			if key != "" {
-				if nodeMap, ok := r.Parent.Node.(map[string]any); ok {
-					nodeMap[key] = true
-				}
-			}
-		},
-
-		"@pair-close-err": func(r *jsonic.Rule, ctx *jsonic.Context) {
-			// Error handler: not used in Go (CL token is disabled).
-		},
-
-		"@val-empty": func(r *jsonic.Rule, ctx *jsonic.Context) {
-			r.Node = ""
-		},
-	}
-
-	// Condition function refs.
-	conds := map[string]condFunc{
-		"@is-table-parent": func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-			return r.Parent != nil && r.Parent.Name == "table"
-		},
-		"@is-table-grandparent": func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-			return r.Parent != nil && r.Parent.Parent != nil &&
-				r.Parent.Parent.Name == "table"
-		},
-	}
-
-	// Parse and build grammar rules from the embedded jsonic file.
-	grammarRules := parseGrammarRules(tokenMap, actions, conds)
-
-	// Apply grammar rules. No Go-specific alt modifications needed —
-	// matchers use rule context (like TS Hoover) instead of a mode variable.
-
-	j.Rule("ini", func(rs *jsonic.RuleSpec) {
-		rs.Clear()
-
-		rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
+	// Function refs (matching @ names in the grammar file).
+	// State actions (@ini-bo, @table-bo, @table-bc) are auto-wired by Grammar().
+	refs := map[jsonic.FuncRef]any{
+		// State actions.
+		"@ini-bo": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			r.Node = make(map[string]any)
 			declaredSections = make(map[string]bool)
-		})
+		}),
 
-		if gr, ok := grammarRules["ini"]; ok {
-			rs.Open = gr.open
-			rs.Close = gr.close
-		}
-	})
-
-	j.Rule("table", func(rs *jsonic.RuleSpec) {
-		rs.Clear()
-
-		rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@table-bo": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			r.Node = r.Parent.Node
 
 			if r.Prev != nil && r.Prev != jsonic.NoRule {
@@ -672,9 +570,9 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 					declaredSections[sectionKey] = true
 				}
 			}
-		})
+		}),
 
-		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
+		"@table-bc": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			if childMap, ok := r.Child.Node.(map[string]any); ok {
 				if nodeMap, ok := r.Node.(map[string]any); ok {
 					for k, v := range childMap {
@@ -682,40 +580,94 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 					}
 				}
 			}
-		})
+		}),
 
-		if gr, ok := grammarRules["table"]; ok {
-			rs.Open = gr.open
-			rs.Close = gr.close
-		}
-	})
+		// Alt actions.
+		"@table-close-dive": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if r.Child != nil && r.Child != jsonic.NoRule {
+				if dive, ok := r.Child.U["dive"].([]string); ok {
+					r.U["dive"] = dive
+				}
+			}
+		}),
 
-	j.Rule("dive", func(rs *jsonic.RuleSpec) {
-		rs.Clear()
+		"@dive-push": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			dive := getDive(r.Parent)
+			val, _ := r.O0.Val.(string)
+			dive = append(dive, val)
+			r.U["dive"] = dive
+			if r.Parent != nil && r.Parent != jsonic.NoRule {
+				r.Parent.U["dive"] = dive
+			}
+		}),
 
-		if gr, ok := grammarRules["dive"]; ok {
-			rs.Open = gr.open
-			rs.Close = gr.close
-		}
-	})
+		"@pair-key-eq": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			key := tokenString(r.O0)
+			nodeMap, _ := r.Node.(map[string]any)
+			if nodeMap == nil {
+				return
+			}
 
-	j.Rule("map", func(rs *jsonic.RuleSpec) {
-		rs.Clear()
+			if _, isArr := nodeMap[key].([]any); isArr {
+				r.U["ini_array"] = nodeMap[key]
+			} else if len(key) > 2 && strings.HasSuffix(key, "[]") {
+				arrayKey := key[:len(key)-2]
+				r.U["key"] = arrayKey
+				if existing, ok := nodeMap[arrayKey].([]any); ok {
+					r.U["ini_array"] = existing
+				} else if _, exists := nodeMap[arrayKey]; exists {
+					r.U["ini_array"] = []any{nodeMap[arrayKey]}
+					nodeMap[arrayKey] = r.U["ini_array"]
+				} else {
+					arr := make([]any, 0)
+					nodeMap[arrayKey] = arr
+					r.U["ini_array"] = arr
+				}
+			} else {
+				r.U["key"] = key
+				r.U["pair"] = true
+			}
+		}),
 
-		if gr, ok := grammarRules["map"]; ok {
-			rs.Open = gr.open
-			rs.Close = gr.close
-		}
-	})
+		"@pair-key-bool": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			key := tokenString(r.O0)
+			if key != "" {
+				if nodeMap, ok := r.Parent.Node.(map[string]any); ok {
+					nodeMap[key] = true
+				}
+			}
+		}),
 
-	j.Rule("pair", func(rs *jsonic.RuleSpec) {
-		rs.Clear()
+		"@pair-close-err": jsonic.AltError(func(r *jsonic.Rule, ctx *jsonic.Context) *jsonic.Token {
+			// Not used in Go (CL token is disabled).
+			return nil
+		}),
 
-		if gr, ok := grammarRules["pair"]; ok {
-			rs.Open = gr.open
-			rs.Close = gr.close
-		}
-	})
+		"@val-empty": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			r.Node = ""
+		}),
+
+		// Conditions.
+		"@is-table-parent": jsonic.AltCond(func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+			return r.Parent != nil && r.Parent.Name == "table"
+		}),
+
+		"@is-table-grandparent": jsonic.AltCond(func(r *jsonic.Rule, ctx *jsonic.Context) bool {
+			return r.Parent != nil && r.Parent.Parent != nil &&
+				r.Parent.Parent.Name == "table"
+		}),
+	}
+
+	// Parse grammar file and apply rules via j.Grammar() — same as TS approach.
+	parser := jsonic.Make()
+	parsed, err := parser.Parse(grammarText)
+	if err != nil {
+		panic("failed to parse ini grammar: " + err.Error())
+	}
+	grammarDef := mapToGrammarSpec(parsed.(map[string]any), refs)
+	if err := j.Grammar(grammarDef); err != nil {
+		panic("failed to apply ini grammar: " + err.Error())
+	}
 
 	// ---- val rule ----
 	// Defined in Go code: needs custom open alts and complex AC handler

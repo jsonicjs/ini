@@ -3,166 +3,109 @@
 package ini
 
 import (
-	"strings"
-
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
-type actionFunc = func(r *jsonic.Rule, ctx *jsonic.Context)
-type condFunc = func(r *jsonic.Rule, ctx *jsonic.Context) bool
-
-type parsedRule struct {
-	open  []*jsonic.AltSpec
-	close []*jsonic.AltSpec
-}
-
-// parseGrammarRules parses the embedded jsonic grammar text and builds
-// rule specifications from the declarative definition.
-func parseGrammarRules(
-	tokenMap map[string]jsonic.Tin,
-	actions map[string]actionFunc,
-	conds map[string]condFunc,
-) map[string]*parsedRule {
-	parser := jsonic.Make()
-	grammarDef, err := parser.Parse(grammarText)
-	if err != nil {
-		panic("failed to parse ini grammar: " + err.Error())
+// mapToGrammarSpec converts a parsed grammar map (from jsonic.Parse of the
+// grammar file) into a typed GrammarSpec. Only the "rule" section is used;
+// options are set separately via MakeJsonic since the grammar file's options
+// are TS-specific.
+func mapToGrammarSpec(parsed map[string]any, ref map[jsonic.FuncRef]any) *jsonic.GrammarSpec {
+	gs := &jsonic.GrammarSpec{
+		Ref: ref,
 	}
 
-	gd, _ := grammarDef.(map[string]any)
-	rules, _ := gd["rule"].(map[string]any)
+	ruleMap, _ := parsed["rule"].(map[string]any)
+	if ruleMap == nil {
+		return gs
+	}
 
-	result := make(map[string]*parsedRule)
-	for name, ruleDef := range rules {
-		rd, _ := ruleDef.(map[string]any)
-		pr := &parsedRule{}
-
+	gs.Rule = make(map[string]*jsonic.GrammarRuleSpec, len(ruleMap))
+	for name, rDef := range ruleMap {
+		rd, ok := rDef.(map[string]any)
+		if !ok {
+			continue
+		}
+		grs := &jsonic.GrammarRuleSpec{}
 		if openDef, ok := rd["open"]; ok {
-			pr.open = buildAltSpecs(openDef, tokenMap, actions, conds)
+			grs.Open = convertAlts(openDef)
 		}
 		if closeDef, ok := rd["close"]; ok {
-			pr.close = buildAltSpecs(closeDef, tokenMap, actions, conds)
+			grs.Close = convertAlts(closeDef)
 		}
-
-		result[name] = pr
+		gs.Rule[name] = grs
 	}
 
-	return result
+	return gs
 }
 
-// buildAltSpecs handles both array format and {alts, inject} object format.
-func buildAltSpecs(
-	def any,
-	tokenMap map[string]jsonic.Tin,
-	actions map[string]actionFunc,
-	conds map[string]condFunc,
-) []*jsonic.AltSpec {
-	var altDefs []any
+// convertAlts handles both plain array and {alts, inject} object formats.
+func convertAlts(def any) any {
 	switch v := def.(type) {
 	case []any:
-		altDefs = v
+		return convertAltList(v)
 	case map[string]any:
-		// Object with alts/inject (e.g. map rule open).
+		result := &jsonic.GrammarAltListSpec{}
 		if alts, ok := v["alts"].([]any); ok {
-			altDefs = alts
+			result.Alts = convertAltList(alts)
 		}
-	}
-
-	var result []*jsonic.AltSpec
-	for _, ad := range altDefs {
-		if altMap, ok := ad.(map[string]any); ok {
-			result = append(result, buildAltSpec(altMap, tokenMap, actions, conds))
-		}
-	}
-	return result
-}
-
-func buildAltSpec(
-	altDef map[string]any,
-	tokenMap map[string]jsonic.Tin,
-	actions map[string]actionFunc,
-	conds map[string]condFunc,
-) *jsonic.AltSpec {
-	alt := &jsonic.AltSpec{}
-
-	if s, ok := altDef["s"]; ok {
-		alt.S = resolveTokenSeq(s, tokenMap)
-	}
-	if p, ok := altDef["p"].(string); ok {
-		alt.P = p
-	}
-	if r, ok := altDef["r"].(string); ok {
-		alt.R = r
-	}
-	if b, ok := altDef["b"]; ok {
-		alt.B = toInt(b)
-	}
-	if a, ok := altDef["a"].(string); ok {
-		if fn, exists := actions[a]; exists {
-			alt.A = fn
-		}
-	}
-	if c, ok := altDef["c"].(string); ok {
-		if fn, exists := conds[c]; exists {
-			alt.C = fn
-		}
-	}
-	if u, ok := altDef["u"].(map[string]any); ok {
-		alt.U = u
-	}
-
-	return alt
-}
-
-// resolveTokenSeq converts the grammar s field to [][]jsonic.Tin.
-//
-// String "s": "#OS" → [][]Tin{{OS}}
-// String "s": "#HK #ST #VL" → [][]Tin{{HK, ST, VL}}  (alternatives at position 0)
-// Array  "s": ["#HK #ST #VL", "#EQ"] → [][]Tin{{HK, ST, VL}, {EQ}}
-func resolveTokenSeq(s any, tokenMap map[string]jsonic.Tin) [][]jsonic.Tin {
-	switch v := s.(type) {
-	case string:
-		parts := strings.Fields(v)
-		var tins []jsonic.Tin
-		for _, p := range parts {
-			if tin, ok := tokenMap[p]; ok {
-				tins = append(tins, tin)
+		if inj, ok := v["inject"].(map[string]any); ok {
+			result.Inject = &jsonic.GrammarInjectSpec{}
+			if app, ok := inj["append"].(bool); ok {
+				result.Inject.Append = app
 			}
-		}
-		if len(tins) == 0 {
-			return nil
-		}
-		return [][]jsonic.Tin{tins}
-	case []any:
-		var result [][]jsonic.Tin
-		for _, elem := range v {
-			str, ok := elem.(string)
-			if !ok {
-				continue
-			}
-			parts := strings.Fields(str)
-			var tins []jsonic.Tin
-			for _, p := range parts {
-				if tin, ok := tokenMap[p]; ok {
-					tins = append(tins, tin)
-				}
-			}
-			result = append(result, tins)
 		}
 		return result
 	}
 	return nil
 }
 
-func toInt(v any) int {
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	case int:
-		return n
-	case int64:
-		return int(n)
+func convertAltList(alts []any) []*jsonic.GrammarAltSpec {
+	result := make([]*jsonic.GrammarAltSpec, 0, len(alts))
+	for _, a := range alts {
+		if am, ok := a.(map[string]any); ok {
+			result = append(result, convertAlt(am))
+		}
 	}
-	return 0
+	return result
 }
 
+func convertAlt(m map[string]any) *jsonic.GrammarAltSpec {
+	ga := &jsonic.GrammarAltSpec{}
+
+	if s, ok := m["s"]; ok {
+		switch sv := s.(type) {
+		case string:
+			ga.S = sv
+		case []any:
+			strs := make([]string, len(sv))
+			for i, v := range sv {
+				strs[i], _ = v.(string)
+			}
+			ga.S = strs
+		}
+	}
+	if b, ok := m["b"]; ok {
+		ga.B = b
+	}
+	if p, ok := m["p"].(string); ok {
+		ga.P = p
+	}
+	if r, ok := m["r"].(string); ok {
+		ga.R = r
+	}
+	if a, ok := m["a"].(string); ok {
+		ga.A = a
+	}
+	if c, ok := m["c"]; ok {
+		ga.C = c
+	}
+	if e, ok := m["e"].(string); ok {
+		ga.E = e
+	}
+	if u, ok := m["u"].(map[string]any); ok {
+		ga.U = u
+	}
+
+	return ga
+}
