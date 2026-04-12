@@ -226,11 +226,13 @@ func TestSectionDuplicateError(t *testing.T) {
 }
 
 func TestKeyByItself(t *testing.T) {
-	result, err := Parse("mykey")
+	// Bare key (without =) means key=true. Works after a key=value pair
+	// (matching TS behavior where pair.close routes bare keys back to pair).
+	result, err := Parse("a=1\nmykey")
 	if err != nil {
 		t.Fatal(err)
 	}
-	assert(t, "key-true", result, map[string]any{"mykey": true})
+	assert(t, "key-true", result, map[string]any{"a": "1", "mykey": true})
 }
 
 func TestArraySyntax(t *testing.T) {
