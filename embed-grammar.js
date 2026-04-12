@@ -1,39 +1,45 @@
 #!/usr/bin/env node
 
-// Embeds ini-grammar.jsonic into src/ini.ts as a template literal.
+// Embeds ini-grammar.jsonic into src/ini.ts and go/ini.go.
 // Run via: npm run embed
 
 const fs = require('fs')
 const path = require('path')
 
-const grammarFile = path.join(__dirname, 'ini-grammar.jsonic')
-const iniTsFile = path.join(__dirname, 'src', 'ini.ts')
-
-const grammar = fs.readFileSync(grammarFile, 'utf8')
-
-// Escape for safe embedding in a JavaScript/TypeScript template literal.
-const escaped = grammar
-  .replace(/\\/g, '\\\\')
-  .replace(/`/g, '\\`')
-  .replace(/\$\{/g, '\\${')
-
-let iniTs = fs.readFileSync(iniTsFile, 'utf8')
+const grammar = fs.readFileSync(path.join(__dirname, 'ini-grammar.jsonic'), 'utf8')
 
 const BEGIN = '// --- BEGIN EMBEDDED ini-grammar.jsonic ---'
 const END = '// --- END EMBEDDED ini-grammar.jsonic ---'
 
-const beginIdx = iniTs.indexOf(BEGIN)
-const endIdx = iniTs.indexOf(END)
-
-if (beginIdx === -1 || endIdx === -1) {
-  console.error('Error: embedding markers not found in src/ini.ts')
-  process.exit(1)
+function embed(file, wrapContent) {
+  let src = fs.readFileSync(file, 'utf8')
+  const beginIdx = src.indexOf(BEGIN)
+  const endIdx = src.indexOf(END)
+  if (beginIdx === -1 || endIdx === -1) {
+    console.error('Error: embedding markers not found in ' + file)
+    process.exit(1)
+  }
+  const replacement = BEGIN + '\n' + wrapContent + '\n' + END
+  src = src.substring(0, beginIdx) + replacement + src.substring(endIdx + END.length)
+  fs.writeFileSync(file, src)
 }
 
-const replacement = BEGIN + '\n' +
-  'const grammarText = `\n' + escaped + '`\n' +
-  END
+// TypeScript: template literal (escape backslashes, backticks, ${).
+const tsContent = grammar
+  .replace(/\\/g, '\\\\')
+  .replace(/`/g, '\\`')
+  .replace(/\$\{/g, '\\${')
+embed(
+  path.join(__dirname, 'src', 'ini.ts'),
+  'const grammarText = `\n' + tsContent + '`'
+)
 
-iniTs = iniTs.substring(0, beginIdx) + replacement + iniTs.substring(endIdx + END.length)
-
-fs.writeFileSync(iniTsFile, iniTs)
+// Go: raw string (backticks cannot appear in content).
+if (grammar.includes('`')) {
+  console.error('Error: grammar file contains backticks, cannot embed in Go raw string')
+  process.exit(1)
+}
+embed(
+  path.join(__dirname, 'go', 'ini.go'),
+  'const grammarText = `\n' + grammar + '`'
+)
