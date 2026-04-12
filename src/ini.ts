@@ -40,6 +40,98 @@ type IniOptions = {
   }
 }
 
+// --- BEGIN EMBEDDED ini-grammar.jsonic ---
+const grammarText = `
+# INI Grammar Definition
+# Parsed by a standard Jsonic instance and passed to jsonic.grammar()
+# Function references (@ prefixed) are resolved against the refs map in ini.ts
+
+{
+  options: {
+    rule: { start: ini, exclude: jsonic },
+    lex: { emptyResult: {} },
+    fixed: {
+      token: { '#EQ': '=', '#DOT': '.', '#OB': null, '#CB': null, '#CL': null },
+    },
+    line: { check: '@line-check' },
+    number: { lex: false },
+    string: { lex: true, chars: QUOTE_CHARS, abandon: true },
+    text: { lex: false },
+    comment: {
+      def: {
+        hash: { eatline: true },
+        slash: null,
+        multi: null,
+        semi: { line: true, start: ';', lex: true, eatline: true },
+      },
+    },
+  },
+
+  rule: {
+    ini: {
+      open: [
+        { s: '#OS', p: table, b: 1 },
+        { s: ['#HK #ST #VL', '#EQ'], p: table, b: 2 },
+        { s: ['#HV', '#OS'], p: table, b: 2 },
+        { s: '#ZZ' },
+      ],
+    },
+
+    table: {
+      open: [
+        { s: '#OS', p: dive },
+        { s: ['#HK #ST #VL', '#EQ'], p: map, b: 2 },
+        { s: ['#HV', '#OS'], p: map, b: 2 },
+        { s: '#CS', p: map },
+        { s: '#ZZ' },
+      ],
+      close: [
+        { s: '#OS', r: table, b: 1 },
+        { s: '#CS', r: table, a: '@table-close-dive' },
+        { s: '#ZZ' },
+      ],
+    },
+
+    dive: {
+      open: [
+        { s: ['#DK', '#DOT'], a: '@dive-push', p: dive },
+        { s: '#DK', a: '@dive-push' },
+      ],
+      close: [
+        { s: '#CS', b: 1 },
+      ],
+    },
+
+    map: {
+      open: {
+        alts: [
+          { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-parent', p: pair, b: 2 },
+          { s: ['#HK #ST #VL'], c: '@is-table-parent', p: pair, b: 1 },
+        ],
+        inject: { append: true },
+      },
+      close: [
+        { s: '#OS', b: 1 },
+        { s: '#ZZ' },
+      ],
+    },
+
+    pair: {
+      open: [
+        { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-grandparent', p: val, a: '@pair-key-eq' },
+        { s: '#HK', c: '@is-table-grandparent', a: '@pair-key-bool' },
+      ],
+      close: [
+        { s: ['#HK #ST #VL', '#CL'], c: '@is-table-grandparent', e: '@pair-close-err' },
+        { s: ['#HK #ST #VL'], b: 1, r: pair },
+        { s: '#OS', b: 1 },
+      ],
+    },
+  },
+}
+`
+// --- END EMBEDDED ini-grammar.jsonic ---
+
 function Ini(jsonic: Jsonic, _options: IniOptions) {
   // Resolve inline comment options.
   const inlineComment = {
@@ -256,92 +348,11 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
     },
   }
 
-  // Declarative grammar: options + rule alternates.
-  jsonic.grammar({
-    ref: refs,
-
-    options: {
-      rule: { start: 'ini', exclude: 'jsonic' },
-      lex: { emptyResult: {} },
-      fixed: {
-        token: { '#EQ': '=', '#DOT': '.', '#OB': null, '#CB': null, '#CL': null },
-      },
-      line: { check: '@line-check' },
-      number: { lex: false },
-      string: { lex: true, chars: `'"`, abandon: true },
-      text: { lex: false },
-      comment: {
-        def: {
-          hash: { eatline: true },
-          slash: null,
-          multi: null,
-          semi: { line: true, start: ';', lex: true, eatline: true },
-        },
-      },
-    },
-
-    rule: {
-      ini: {
-        open: [
-          { s: '#OS', p: 'table', b: 1 },
-          { s: ['#HK #ST #VL', '#EQ'], p: 'table', b: 2 },
-          { s: ['#HV', '#OS'], p: 'table', b: 2 },
-          { s: '#ZZ' },
-        ]
-      },
-
-      table: {
-        open: [
-          { s: '#OS', p: 'dive' },
-          { s: ['#HK #ST #VL', '#EQ'], p: 'map', b: 2 },
-          { s: ['#HV', '#OS'], p: 'map', b: 2 },
-          { s: '#CS', p: 'map' },
-          { s: '#ZZ' },
-        ],
-        close: [
-          { s: '#OS', r: 'table', b: 1 },
-          { s: '#CS', r: 'table', a: '@table-close-dive' },
-          { s: '#ZZ' },
-        ]
-      },
-
-      dive: {
-        open: [
-          { s: ['#DK', '#DOT'], a: '@dive-push', p: 'dive' },
-          { s: '#DK', a: '@dive-push' },
-        ],
-        close: [
-          { s: '#CS', b: 1 },
-        ]
-      },
-
-      map: {
-        open: {
-          alts: [
-            { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-parent', p: 'pair', b: 2 },
-            { s: ['#HK #ST #VL'], c: '@is-table-parent', p: 'pair', b: 1 },
-          ],
-          inject: { append: true }
-        },
-        close: [
-          { s: '#OS', b: 1 },
-          { s: '#ZZ' },
-        ]
-      },
-
-      pair: {
-        open: [
-          { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-grandparent', p: 'val', a: '@pair-key-eq' },
-          { s: '#HK', c: '@is-table-grandparent', a: '@pair-key-bool' },
-        ],
-        close: [
-          { s: ['#HK #ST #VL', '#CL'], c: '@is-table-grandparent', e: '@pair-close-err' },
-          { s: ['#HK #ST #VL'], b: 1, r: 'pair' },
-          { s: '#OS', b: 1 },
-        ]
-      },
-    }
-  })
+  // Parse embedded grammar definition using a separate standard Jsonic instance.
+  const grammarDef = Jsonic.make()(grammarText)
+  grammarDef.ref = refs
+  grammarDef.options.string.chars = `'"`
+  jsonic.grammar(grammarDef)
 
   // Custom value lex matcher.
   // Needed when: (a) multiline continuation is enabled, or
