@@ -20,9 +20,10 @@
   "scripts": {
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
     "test-some": "node --enable-source-maps --test-name-pattern=\"$npm_config_pattern\" --test \"dist-test/*.test.js\"",
-    "embed": "node embed-grammar.js",
+    "embed": "node embed-grammar.js && node embed-grammar-go.js",
+    "embed-go": "node embed-grammar-go.js",
     "watch": "tsc --build src test -w",
-    "build": "node embed-grammar.js && tsc -p node_modules/@jsonic/hoover/src/tsconfig.json && tsc --build src test",
+    "build": "node embed-grammar.js && node embed-grammar-go.js && tsc -p node_modules/@jsonic/hoover/src/tsconfig.json && tsc --build src test",
     "clean": "rm -rf dist dist-test node_modules yarn.lock package-lock.json",
     "doc": "jsonic-doc",
     "reset": "npm run clean && npm i && npm run build && npm test",
