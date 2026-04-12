@@ -21,7 +21,7 @@
     "test": "node --enable-source-maps --test \"dist-test/*.test.js\"",
     "test-some": "node --enable-source-maps --test-name-pattern=\"$npm_config_pattern\" --test \"dist-test/*.test.js\"",
     "watch": "tsc --build src test -w",
-    "build": "tsc --build src test",
+    "build": "tsc -p node_modules/@jsonic/hoover/src/tsconfig.json && tsc --build src test",
     "clean": "rm -rf dist dist-test node_modules yarn.lock package-lock.json",
     "doc": "jsonic-doc",
     "reset": "npm run clean && npm i && npm run build && npm test",
@@ -38,11 +38,13 @@
   "devDependencies": {
     "@hapi/code": "^9.0.3",
     "@jsonic/doc": "^0.0.9",
+    "@jsonic/hoover": "github:jsonicjs/hoover#main",
     "@types/node": "^25.4.0",
+    "jsonic": "github:jsonicjs/jsonic#main",
     "typescript": "^5.9.3"
   },
   "peerDependencies": {
-    "@jsonic/hoover": "^0.8.0",
-    "jsonic": "^2.20.1"
+    "@jsonic/hoover": ">=0.9.0",
+    "jsonic": ">=2.21.1"
   }
 }
