@@ -1,87 +1,75 @@
 # INI Grammar Definition
 # Parsed by a standard Jsonic instance and passed to jsonic.grammar()
-# Function references (@ prefixed) are resolved against the refs map in ini.ts
+# Function references (@ prefixed) are resolved against the refs map
 
 {
-  options: {
-    rule: { start: ini, exclude: jsonic },
-    lex: { emptyResult: {} },
-    fixed: {
-      token: { '#EQ': '=', '#DOT': '.', '#OB': null, '#CB': null, '#CL': null },
-    },
-    line: { check: '@line-check' },
-    number: { lex: false },
-    string: { lex: true, chars: QUOTE_CHARS, abandon: true },
-    text: { lex: false },
-    comment: {
-      def: {
-        hash: { eatline: true },
-        slash: null,
-        multi: null,
-        semi: { line: true, start: ';', lex: true, eatline: true },
-      },
-    },
-  },
+  options: rule: start: ini
+  options: rule: exclude: jsonic
+  options: lex: emptyResult: {}
+  options: fixed: token: '#EQ': '='
+  options: fixed: token: '#DOT': '.'
+  options: fixed: token: '#OB': null
+  options: fixed: token: '#CB': null
+  options: fixed: token: '#CL': null
+  options: line: check: '@line-check'
+  options: number: lex: false
+  options: string: lex: true
+  options: string: chars: QUOTE_CHARS
+  options: string: abandon: true
+  options: text: lex: false
+  options: comment: def: hash: eatline: true
+  options: comment: def: slash: null
+  options: comment: def: multi: null
+  options: comment: def: semi: line: true
+  options: comment: def: semi: start: ';'
+  options: comment: def: semi: lex: true
+  options: comment: def: semi: eatline: true
 
-  rule: {
-    ini: {
-      open: [
-        { s: '#OS', p: table, b: 1 },
-        { s: ['#HK #ST #VL', '#EQ'], p: table, b: 2 },
-        { s: ['#HV', '#OS'], p: table, b: 2 },
-        { s: '#ZZ' },
-      ],
-    },
+  rule: ini: open: [
+    { s: '#OS', p: table, b: 1 }
+    { s: ['#HK #ST #VL', '#EQ'], p: table, b: 2 }
+    { s: ['#HV', '#OS'], p: table, b: 2 }
+    { s: '#ZZ' }
+  ]
 
-    table: {
-      open: [
-        { s: '#OS', p: dive },
-        { s: ['#HK #ST #VL', '#EQ'], p: map, b: 2 },
-        { s: ['#HV', '#OS'], p: map, b: 2 },
-        { s: '#CS', p: map },
-        { s: '#ZZ' },
-      ],
-      close: [
-        { s: '#OS', r: table, b: 1 },
-        { s: '#CS', r: table, a: '@table-close-dive' },
-        { s: '#ZZ' },
-      ],
-    },
+  rule: table: open: [
+    { s: '#OS', p: dive }
+    { s: ['#HK #ST #VL', '#EQ'], p: map, b: 2 }
+    { s: ['#HV', '#OS'], p: map, b: 2 }
+    { s: '#CS', p: map }
+    { s: '#ZZ' }
+  ]
+  rule: table: close: [
+    { s: '#OS', r: table, b: 1 }
+    { s: '#CS', r: table, a: '@table-close-dive' }
+    { s: '#ZZ' }
+  ]
 
-    dive: {
-      open: [
-        { s: ['#DK', '#DOT'], a: '@dive-push', p: dive },
-        { s: '#DK', a: '@dive-push' },
-      ],
-      close: [
-        { s: '#CS', b: 1 },
-      ],
-    },
+  rule: dive: open: [
+    { s: ['#DK', '#DOT'], a: '@dive-push', p: dive }
+    { s: '#DK', a: '@dive-push' }
+  ]
+  rule: dive: close: [
+    { s: '#CS', b: 1 }
+  ]
 
-    map: {
-      open: {
-        alts: [
-          { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-parent', p: pair, b: 2 },
-          { s: ['#HK #ST #VL'], c: '@is-table-parent', p: pair, b: 1 },
-        ],
-        inject: { append: true },
-      },
-      close: [
-        { s: '#OS', b: 1 },
-        { s: '#ZZ' },
-      ],
-    },
+  rule: map: open: alts: [
+    { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-parent', p: pair, b: 2 }
+    { s: ['#HK #ST #VL'], c: '@is-table-parent', p: pair, b: 1 }
+  ]
+  rule: map: open: inject: append: true
+  rule: map: close: [
+    { s: '#OS', b: 1 }
+    { s: '#ZZ' }
+  ]
 
-    pair: {
-      open: [
-        { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-grandparent', p: val, a: '@pair-key-eq' },
-        { s: '#HK', c: '@is-table-grandparent', a: '@pair-key-bool' },
-      ],
-      close: [
-        { s: ['#HK #ST #VL', '#CL'], c: '@is-table-grandparent', e: '@pair-close-err' },
-        { s: ['#HK #ST #VL'], b: 1, r: pair },
-        { s: '#OS', b: 1 },
-      ],
-    },
-  },
+  rule: pair: open: [
+    { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-grandparent', p: val, a: '@pair-key-eq' }
+    { s: '#HK', c: '@is-table-grandparent', a: '@pair-key-bool' }
+  ]
+  rule: pair: close: [
+    { s: ['#HK #ST #VL', '#CL'], c: '@is-table-grandparent', e: '@pair-close-err' }
+    { s: ['#HK #ST #VL'], b: 1, r: pair }
+    { s: '#OS', b: 1 }
+  ]
 }
