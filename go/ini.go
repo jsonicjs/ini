@@ -169,51 +169,51 @@ const grammarText = `
   options: comment: def: semi: eatline: true
 
   rule: ini: open: [
-    { s: '#OS', p: table, b: 1 }
-    { s: ['#HK #ST #VL', '#EQ'], p: table, b: 2 }
-    { s: ['#HV', '#OS'], p: table, b: 2 }
+    { s: '#OS' p: table b: 1 }
+    { s: ['#HK #ST #VL' '#EQ'] p: table b: 2 }
+    { s: ['#HV' '#OS'] p: table b: 2 }
     { s: '#ZZ' }
   ]
 
   rule: table: open: [
-    { s: '#OS', p: dive }
-    { s: ['#HK #ST #VL', '#EQ'], p: map, b: 2 }
-    { s: ['#HV', '#OS'], p: map, b: 2 }
-    { s: '#CS', p: map }
+    { s: '#OS' p: dive }
+    { s: ['#HK #ST #VL' '#EQ'] p: map b: 2 }
+    { s: ['#HV' '#OS'] p: map b: 2 }
+    { s: '#CS' p: map }
     { s: '#ZZ' }
   ]
   rule: table: close: [
-    { s: '#OS', r: table, b: 1 }
-    { s: '#CS', r: table, a: '@table-close-dive' }
+    { s: '#OS' r: table b: 1 }
+    { s: '#CS' r: table a: '@table-close-dive' }
     { s: '#ZZ' }
   ]
 
   rule: dive: open: [
-    { s: ['#DK', '#DOT'], a: '@dive-push', p: dive }
-    { s: '#DK', a: '@dive-push' }
+    { s: ['#DK' '#DOT'] a: '@dive-push' p: dive }
+    { s: '#DK' a: '@dive-push' }
   ]
   rule: dive: close: [
-    { s: '#CS', b: 1 }
+    { s: '#CS' b: 1 }
   ]
 
   rule: map: open: alts: [
-    { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-parent', p: pair, b: 2 }
-    { s: ['#HK #ST #VL'], c: '@is-table-parent', p: pair, b: 1 }
+    { s: ['#HK #ST #VL' '#EQ'] c: '@is-table-parent' p: pair b: 2 }
+    { s: ['#HK #ST #VL'] c: '@is-table-parent' p: pair b: 1 }
   ]
   rule: map: open: inject: append: true
   rule: map: close: [
-    { s: '#OS', b: 1 }
+    { s: '#OS' b: 1 }
     { s: '#ZZ' }
   ]
 
   rule: pair: open: [
-    { s: ['#HK #ST #VL', '#EQ'], c: '@is-table-grandparent', p: val, a: '@pair-key-eq' }
-    { s: '#HK', c: '@is-table-grandparent', a: '@pair-key-bool' }
+    { s: ['#HK #ST #VL' '#EQ'] c: '@is-table-grandparent' p: val a: '@pair-key-eq' }
+    { s: '#HK' c: '@is-table-grandparent' a: '@pair-key-bool' }
   ]
   rule: pair: close: [
-    { s: ['#HK #ST #VL', '#CL'], c: '@is-table-grandparent', e: '@pair-close-err' }
-    { s: ['#HK #ST #VL'], b: 1, r: pair }
-    { s: '#OS', b: 1 }
+    { s: ['#HK #ST #VL' '#CL'] c: '@is-table-grandparent' e: '@pair-close-err' }
+    { s: ['#HK #ST #VL'] b: 1 r: pair }
+    { s: '#OS' b: 1 }
   ]
 }
 `

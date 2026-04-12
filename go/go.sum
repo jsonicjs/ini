@@ -2,3 +2,5 @@ github.com/jsonicjs/jsonic/go v0.1.6 h1:oUw4vxCK6tqa7SGN87vjCtx3sCpeHXdqfl25hx5L
 github.com/jsonicjs/jsonic/go v0.1.6/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
 github.com/jsonicjs/jsonic/go v0.1.13-0.20260412163234-7d968a3fa474 h1:jST6+WLXT7utj/AhS9rtOnVeGHvg2w5cqBijY31PJ14=
 github.com/jsonicjs/jsonic/go v0.1.13-0.20260412163234-7d968a3fa474/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
+github.com/jsonicjs/jsonic/go v0.1.13-0.20260412213517-37ffed6e0b00 h1:jEvbomzt1jsnIp18/p1Tgs4qFd0EJ110xpp9dsoxTYk=
+github.com/jsonicjs/jsonic/go v0.1.13-0.20260412213517-37ffed6e0b00/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
