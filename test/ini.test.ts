@@ -1,7 +1,7 @@
 /* Copyright (c) 2021-2025 Richard Rodger and other contributors, MIT License */
 
 import { test, describe } from 'node:test'
-import { expect } from '@hapi/code'
+import assert from 'node:assert'
 
 import { Jsonic } from 'jsonic'
 import { Ini } from '../dist/ini'
@@ -13,18 +13,18 @@ const j = Jsonic.make().use(Ini)
 describe('ini', () => {
 
   test('happy', () => {
-    expect(j('a=1')).equal({ a: "1" })
-    expect(j('[A]')).equal({ A: {} })
-    expect(j(`[A.B]\nc='2'`)).equal({ A: { B: { c: 2 } } })
-    expect(j('a[]=1\na[]=2')).equal({ a: ['1', '2'] })
-    expect(j('a=\nb=')).equal({ a: '', b: '' })
+    assert.deepEqual(j('a=1'), { a: "1" })
+    assert.deepEqual(j('[A]'), { A: {} })
+    assert.deepEqual(j(`[A.B]\nc='2'`), { A: { B: { c: 2 } } })
+    assert.deepEqual(j('a[]=1\na[]=2'), { a: ['1', '2'] })
+    assert.deepEqual(j('a=\nb='), { a: '', b: '' })
     // Inline comments are off by default; ; and # mid-value are literal.
-    expect(j(';X\n#Y\na=1;2\nb=2')).equal({ a: '1;2', b: '2' })
+    assert.deepEqual(j(';X\n#Y\na=1;2\nb=2'), { a: '1;2', b: '2' })
   })
 
 
   test('basic', () => {
-    expect(j(`
+    assert.deepEqual(j(`
 ; comment
 a = 1
 b = x
@@ -57,8 +57,8 @@ u = v = 5
 w = '{"y":{"z":6}}'
 aa = 7
 
-`))
-      .equal({
+`),
+      {
         a: '1',
         b: 'x',
         c: 'y y',
@@ -90,7 +90,7 @@ aa = 7
 
   // NOTE: Copyright (c) Isaac Z. Schlueter and Contributors, ISC License
   test('ini-module-test', () => {
-    expect(j(`
+    assert.deepEqual(j(`
 o = p
 
 a with spaces   =     b  c
@@ -182,8 +182,8 @@ nocomment = this\\; this is not a comment
 # http://en.wikipedia.org/wiki/INI_file#Comments
 
 # this next one is not a comment!  it's escaped!
-noHashComment = this\\# this is not a comment`))
-      .equal({
+noHashComment = this\\# this is not a comment`),
+      {
         " xa  n          p ": "\"\r\nyoyoyo\r\r\n",
         "[disturbing]": "hey you never know",
         "a": {
@@ -247,58 +247,58 @@ describe('multiline', () => {
     const jm = Jsonic.make().use(Ini, { multiline: true })
 
     // Basic continuation with \<LF>
-    expect(jm('a = hello \\\nworld')).equal({ a: 'hello world' })
+    assert.deepEqual(jm('a = hello \\\nworld'), { a: 'hello world' })
 
     // Continuation with leading whitespace on next line (consumed)
-    expect(jm('a = hello \\\n    world')).equal({ a: 'hello world' })
+    assert.deepEqual(jm('a = hello \\\n    world'), { a: 'hello world' })
 
     // Multiple continuations
-    expect(jm('a = one \\\ntwo \\\nthree')).equal({ a: 'one two three' })
+    assert.deepEqual(jm('a = one \\\ntwo \\\nthree'), { a: 'one two three' })
 
     // No continuation: normal newline ends value
-    expect(jm('a = hello\nb = world')).equal({ a: 'hello', b: 'world' })
+    assert.deepEqual(jm('a = hello\nb = world'), { a: 'hello', b: 'world' })
 
     // Continuation with \<CR><LF>
-    expect(jm('a = hello \\\r\nworld')).equal({ a: 'hello world' })
+    assert.deepEqual(jm('a = hello \\\r\nworld'), { a: 'hello world' })
 
     // Escaped backslash before newline is NOT continuation
-    expect(jm('a = path\\\\\nb = next')).equal({ a: 'path\\', b: 'next' })
+    assert.deepEqual(jm('a = path\\\\\nb = next'), { a: 'path\\', b: 'next' })
 
     // Continuation in a section
-    expect(jm('[s]\na = hello \\\n    world')).equal({ s: { a: 'hello world' } })
+    assert.deepEqual(jm('[s]\na = hello \\\n    world'), { s: { a: 'hello world' } })
 
     // Empty value with continuation
-    expect(jm('a = \\\nworld')).equal({ a: 'world' })
+    assert.deepEqual(jm('a = \\\nworld'), { a: 'world' })
 
     // Inline comments off by default: ; is literal in value
-    expect(jm('a = hello \\\nworld ;not-a-comment\nb = 2'))
-      .equal({ a: 'hello world ;not-a-comment', b: '2' })
+    assert.deepEqual(jm('a = hello \\\nworld ;not-a-comment\nb = 2'),
+      { a: 'hello world ;not-a-comment', b: '2' })
   })
 
   test('indent-continuation', () => {
     const ji = Jsonic.make().use(Ini, { multiline: { indent: true, continuation: false } })
 
     // Indented line continues previous value
-    expect(ji('a = hello\n    world')).equal({ a: 'hello world' })
+    assert.deepEqual(ji('a = hello\n    world'), { a: 'hello world' })
 
     // Multiple indent continuations
-    expect(ji('a = line1\n  line2\n  line3')).equal({ a: 'line1 line2 line3' })
+    assert.deepEqual(ji('a = line1\n  line2\n  line3'), { a: 'line1 line2 line3' })
 
     // Non-indented line is a new key
-    expect(ji('a = hello\nb = world')).equal({ a: 'hello', b: 'world' })
+    assert.deepEqual(ji('a = hello\nb = world'), { a: 'hello', b: 'world' })
 
     // Tab indent
-    expect(ji('a = hello\n\tworld')).equal({ a: 'hello world' })
+    assert.deepEqual(ji('a = hello\n\tworld'), { a: 'hello world' })
 
     // Indent continuation in section
-    expect(ji('[s]\na = hello\n    world'))
-      .equal({ s: { a: 'hello world' } })
+    assert.deepEqual(ji('[s]\na = hello\n    world'),
+      { s: { a: 'hello world' } })
   })
 
   test('multiline-with-boolean-option', () => {
     // multiline: true enables defaults (backslash continuation, no indent)
     const jm = Jsonic.make().use(Ini, { multiline: true })
-    expect(jm('a = hello \\\nworld')).equal({ a: 'hello world' })
+    assert.deepEqual(jm('a = hello \\\nworld'), { a: 'hello world' })
   })
 
   test('multiline-both-modes', () => {
@@ -308,10 +308,10 @@ describe('multiline', () => {
     })
 
     // Backslash continuation works
-    expect(jb('a = hello \\\nworld')).equal({ a: 'hello world' })
+    assert.deepEqual(jb('a = hello \\\nworld'), { a: 'hello world' })
 
     // Indent continuation also works
-    expect(jb('a = hello\n    world')).equal({ a: 'hello world' })
+    assert.deepEqual(jb('a = hello\n    world'), { a: 'hello world' })
   })
 
   test('multiline-escapes', () => {
@@ -322,23 +322,23 @@ describe('multiline', () => {
     })
 
     // Escaped comment chars still work with continuation
-    expect(jm('a = one\\; two \\\nthree'))
-      .equal({ a: 'one; two three' })
+    assert.deepEqual(jm('a = one\\; two \\\nthree'),
+      { a: 'one; two three' })
 
     // Escaped hash
-    expect(jm('a = one\\# two \\\nthree'))
-      .equal({ a: 'one# two three' })
+    assert.deepEqual(jm('a = one\\# two \\\nthree'),
+      { a: 'one# two three' })
   })
 
   test('multiline-no-inline-comments', () => {
     // Multiline without inline comments: ; and # are literal
     const jm = Jsonic.make().use(Ini, { multiline: true })
 
-    expect(jm('a = one; two \\\nthree'))
-      .equal({ a: 'one; two three' })
+    assert.deepEqual(jm('a = one; two \\\nthree'),
+      { a: 'one; two three' })
 
-    expect(jm('a = one# two \\\nthree'))
-      .equal({ a: 'one# two three' })
+    assert.deepEqual(jm('a = one# two \\\nthree'),
+      { a: 'one# two three' })
   })
 })
 
@@ -349,75 +349,75 @@ describe('section-duplicate', () => {
     const j = Jsonic.make().use(Ini)
 
     // Default: merge keys from duplicate sections
-    expect(j('[a]\nx=1\ny=2\n[a]\nz=3'))
-      .equal({ a: { x: '1', y: '2', z: '3' } })
+    assert.deepEqual(j('[a]\nx=1\ny=2\n[a]\nz=3'),
+      { a: { x: '1', y: '2', z: '3' } })
 
     // Duplicate key: last value wins
-    expect(j('[a]\nx=1\n[a]\nx=2'))
-      .equal({ a: { x: '2' } })
+    assert.deepEqual(j('[a]\nx=1\n[a]\nx=2'),
+      { a: { x: '2' } })
 
     // Nested duplicate sections merge
-    expect(j('[a.b]\nx=1\n[a.b]\ny=2'))
-      .equal({ a: { b: { x: '1', y: '2' } } })
+    assert.deepEqual(j('[a.b]\nx=1\n[a.b]\ny=2'),
+      { a: { b: { x: '1', y: '2' } } })
 
     // Intermediate path preserved when merging
-    expect(j('[a.b]\nx=1\n[a]\ny=2'))
-      .equal({ a: { b: { x: '1' }, y: '2' } })
+    assert.deepEqual(j('[a.b]\nx=1\n[a]\ny=2'),
+      { a: { b: { x: '1' }, y: '2' } })
   })
 
   test('merge-explicit', () => {
     const jm = Jsonic.make().use(Ini, { section: { duplicate: 'merge' } })
 
-    expect(jm('[a]\nx=1\n[a]\ny=2'))
-      .equal({ a: { x: '1', y: '2' } })
+    assert.deepEqual(jm('[a]\nx=1\n[a]\ny=2'),
+      { a: { x: '1', y: '2' } })
   })
 
   test('override', () => {
     const jo = Jsonic.make().use(Ini, { section: { duplicate: 'override' } })
 
     // Second occurrence replaces first
-    expect(jo('[a]\nx=1\ny=2\n[a]\nz=3'))
-      .equal({ a: { z: '3' } })
+    assert.deepEqual(jo('[a]\nx=1\ny=2\n[a]\nz=3'),
+      { a: { z: '3' } })
 
     // First occurrence works normally
-    expect(jo('[a]\nx=1'))
-      .equal({ a: { x: '1' } })
+    assert.deepEqual(jo('[a]\nx=1'),
+      { a: { x: '1' } })
 
     // Override clears subsections too
-    expect(jo('[a.b]\nx=1\n[a]\ny=2\n[a]\nz=3'))
-      .equal({ a: { z: '3' } })
+    assert.deepEqual(jo('[a.b]\nx=1\n[a]\ny=2\n[a]\nz=3'),
+      { a: { z: '3' } })
 
     // Non-duplicate sections unaffected
-    expect(jo('[a]\nx=1\n[b]\ny=2'))
-      .equal({ a: { x: '1' }, b: { y: '2' } })
+    assert.deepEqual(jo('[a]\nx=1\n[b]\ny=2'),
+      { a: { x: '1' }, b: { y: '2' } })
 
     // Nested override
-    expect(jo('[a.b]\nx=1\n[a.b]\ny=2'))
-      .equal({ a: { b: { y: '2' } } })
+    assert.deepEqual(jo('[a.b]\nx=1\n[a.b]\ny=2'),
+      { a: { b: { y: '2' } } })
   })
 
   test('error', () => {
     const je = Jsonic.make().use(Ini, { section: { duplicate: 'error' } })
 
     // Single section: no error
-    expect(je('[a]\nx=1')).equal({ a: { x: '1' } })
+    assert.deepEqual(je('[a]\nx=1'), { a: { x: '1' } })
 
     // Multiple distinct sections: no error
-    expect(je('[a]\nx=1\n[b]\ny=2'))
-      .equal({ a: { x: '1' }, b: { y: '2' } })
+    assert.deepEqual(je('[a]\nx=1\n[b]\ny=2'),
+      { a: { x: '1' }, b: { y: '2' } })
 
     // Duplicate section: throws
-    expect(() => je('[a]\nx=1\n[a]\ny=2'))
-      .to.throw(/Duplicate section/)
+    assert.throws(() => je('[a]\nx=1\n[a]\ny=2'),
+      /Duplicate section/)
 
     // Duplicate nested section: throws
-    expect(() => je('[a.b]\nx=1\n[a.b]\ny=2'))
-      .to.throw(/Duplicate section/)
+    assert.throws(() => je('[a.b]\nx=1\n[a.b]\ny=2'),
+      /Duplicate section/)
 
     // Intermediate path is NOT a declared section
     // [a.b] creates intermediate [a] but does not declare it
-    expect(je('[a.b]\nx=1\n[a]\ny=2'))
-      .equal({ a: { b: { x: '1' }, y: '2' } })
+    assert.deepEqual(je('[a.b]\nx=1\n[a]\ny=2'),
+      { a: { b: { x: '1' }, y: '2' } })
   })
 })
 
@@ -428,13 +428,13 @@ describe('inline-comment', () => {
     // Default: inline comments are off. ; and # mid-value are literal.
     const j = Jsonic.make().use(Ini)
 
-    expect(j('a = hello ; world')).equal({ a: 'hello ; world' })
-    expect(j('a = hello # world')).equal({ a: 'hello # world' })
-    expect(j('a = x;y;z')).equal({ a: 'x;y;z' })
+    assert.deepEqual(j('a = hello ; world'), { a: 'hello ; world' })
+    assert.deepEqual(j('a = hello # world'), { a: 'hello # world' })
+    assert.deepEqual(j('a = x;y;z'), { a: 'x;y;z' })
 
     // Line-start comments still work
-    expect(j('; comment\na = 1')).equal({ a: '1' })
-    expect(j('# comment\na = 1')).equal({ a: '1' })
+    assert.deepEqual(j('; comment\na = 1'), { a: '1' })
+    assert.deepEqual(j('# comment\na = 1'), { a: '1' })
   })
 
   test('active-basic', () => {
@@ -443,10 +443,10 @@ describe('inline-comment', () => {
       comment: { inline: { active: true } },
     })
 
-    expect(j('a = hello ; comment')).equal({ a: 'hello' })
-    expect(j('a = hello # comment')).equal({ a: 'hello' })
-    expect(j('a = x;y')).equal({ a: 'x' })
-    expect(j('a = value\nb = other')).equal({ a: 'value', b: 'other' })
+    assert.deepEqual(j('a = hello ; comment'), { a: 'hello' })
+    assert.deepEqual(j('a = hello # comment'), { a: 'hello' })
+    assert.deepEqual(j('a = x;y'), { a: 'x' })
+    assert.deepEqual(j('a = value\nb = other'), { a: 'value', b: 'other' })
   })
 
   test('custom-chars', () => {
@@ -455,8 +455,8 @@ describe('inline-comment', () => {
       comment: { inline: { active: true, chars: [';'] } },
     })
 
-    expect(j('a = hello ; comment')).equal({ a: 'hello' })
-    expect(j('a = hello # not a comment')).equal({ a: 'hello # not a comment' })
+    assert.deepEqual(j('a = hello ; comment'), { a: 'hello' })
+    assert.deepEqual(j('a = hello # not a comment'), { a: 'hello # not a comment' })
   })
 
   test('backslash-escape', () => {
@@ -465,9 +465,9 @@ describe('inline-comment', () => {
       comment: { inline: { active: true, escape: { backslash: true } } },
     })
 
-    expect(j('a = hello\\; world')).equal({ a: 'hello; world' })
-    expect(j('a = hello\\# world')).equal({ a: 'hello# world' })
-    expect(j('a = x\\;y ; comment')).equal({ a: 'x;y' })
+    assert.deepEqual(j('a = hello\\; world'), { a: 'hello; world' })
+    assert.deepEqual(j('a = hello\\# world'), { a: 'hello# world' })
+    assert.deepEqual(j('a = x\\;y ; comment'), { a: 'x;y' })
   })
 
   test('backslash-escape-disabled', () => {
@@ -479,10 +479,10 @@ describe('inline-comment', () => {
     })
 
     // \; → \; (backslash preserved, ; did not terminate)
-    expect(j('a = hello\\; world')).equal({ a: 'hello\\; world' })
+    assert.deepEqual(j('a = hello\\; world'), { a: 'hello\\; world' })
 
     // Unescaped ; still terminates
-    expect(j('a = hello ; comment')).equal({ a: 'hello' })
+    assert.deepEqual(j('a = hello ; comment'), { a: 'hello' })
   })
 
   test('whitespace-prefix', () => {
@@ -492,15 +492,15 @@ describe('inline-comment', () => {
     })
 
     // No whitespace before ;  →  literal
-    expect(j('a = x;y;z')).equal({ a: 'x;y;z' })
+    assert.deepEqual(j('a = x;y;z'), { a: 'x;y;z' })
 
     // Whitespace before ;  →  inline comment
-    expect(j('a = hello ;comment')).equal({ a: 'hello' })
-    expect(j('a = hello\t;comment')).equal({ a: 'hello' })
+    assert.deepEqual(j('a = hello ;comment'), { a: 'hello' })
+    assert.deepEqual(j('a = hello\t;comment'), { a: 'hello' })
 
     // Same for #
-    expect(j('a = x#y')).equal({ a: 'x#y' })
-    expect(j('a = hello #comment')).equal({ a: 'hello' })
+    assert.deepEqual(j('a = x#y'), { a: 'x#y' })
+    assert.deepEqual(j('a = hello #comment'), { a: 'hello' })
   })
 
   test('whitespace-prefix-with-backslash', () => {
@@ -515,13 +515,13 @@ describe('inline-comment', () => {
     })
 
     // No whitespace: literal
-    expect(j('a = x;y')).equal({ a: 'x;y' })
+    assert.deepEqual(j('a = x;y'), { a: 'x;y' })
 
     // Whitespace present: comment
-    expect(j('a = hello ;comment')).equal({ a: 'hello' })
+    assert.deepEqual(j('a = hello ;comment'), { a: 'hello' })
 
     // Backslash escape overrides whitespace: literal
-    expect(j('a = hello \\;not-a-comment')).equal({ a: 'hello ;not-a-comment' })
+    assert.deepEqual(j('a = hello \\;not-a-comment'), { a: 'hello ;not-a-comment' })
   })
 
   test('with-multiline', () => {
@@ -532,12 +532,12 @@ describe('inline-comment', () => {
     })
 
     // Comment terminates continued value
-    expect(j('a = hello \\\nworld ;comment\nb = 2'))
-      .equal({ a: 'hello world', b: '2' })
+    assert.deepEqual(j('a = hello \\\nworld ;comment\nb = 2'),
+      { a: 'hello world', b: '2' })
 
     // Escaped comment char in multiline value
-    expect(j('a = hello\\; \\\nworld'))
-      .equal({ a: 'hello; world' })
+    assert.deepEqual(j('a = hello\\; \\\nworld'),
+      { a: 'hello; world' })
   })
 
   test('with-sections', () => {
@@ -545,8 +545,8 @@ describe('inline-comment', () => {
       comment: { inline: { active: true } },
     })
 
-    expect(j('[s]\na = val ; comment\nb = other'))
-      .equal({ s: { a: 'val', b: 'other' } })
+    assert.deepEqual(j('[s]\na = val ; comment\nb = other'),
+      { s: { a: 'val', b: 'other' } })
   })
 
   test('line-comments-always-work', () => {
@@ -557,8 +557,8 @@ describe('inline-comment', () => {
     })
 
     const input = '; line comment\n# hash comment\na = 1'
-    expect(jOff(input)).equal({ a: '1' })
-    expect(jOn(input)).equal({ a: '1' })
+    assert.deepEqual(jOff(input), { a: '1' })
+    assert.deepEqual(jOn(input), { a: '1' })
   })
 })
 
@@ -575,71 +575,71 @@ describe('number-lex', () => {
   test('integers', () => {
     const jn = makeWithNumbers()
 
-    expect(jn('a=1')).equal({ a: 1 })
-    expect(jn('a=0')).equal({ a: 0 })
-    expect(jn('a=-3')).equal({ a: -3 })
-    expect(jn('a=+2')).equal({ a: 2 })
-    expect(jn('a=42\nb=99')).equal({ a: 42, b: 99 })
+    assert.deepEqual(jn('a=1'), { a: 1 })
+    assert.deepEqual(jn('a=0'), { a: 0 })
+    assert.deepEqual(jn('a=-3'), { a: -3 })
+    assert.deepEqual(jn('a=+2'), { a: 2 })
+    assert.deepEqual(jn('a=42\nb=99'), { a: 42, b: 99 })
   })
 
   test('floats', () => {
     const jn = makeWithNumbers()
 
-    expect(jn('a=2.5')).equal({ a: 2.5 })
-    expect(jn('a=0.0')).equal({ a: 0 })
-    expect(jn('a=-1.25')).equal({ a: -1.25 })
+    assert.deepEqual(jn('a=2.5'), { a: 2.5 })
+    assert.deepEqual(jn('a=0.0'), { a: 0 })
+    assert.deepEqual(jn('a=-1.25'), { a: -1.25 })
   })
 
   test('scientific-notation', () => {
     const jn = makeWithNumbers()
 
-    expect(jn('a=1e10')).equal({ a: 1e10 })
+    assert.deepEqual(jn('a=1e10'), { a: 1e10 })
   })
 
   test('hex', () => {
     const jn = makeWithNumbers()
 
-    expect(jn('a=0xFF')).equal({ a: 255 })
+    assert.deepEqual(jn('a=0xFF'), { a: 255 })
   })
 
   test('mixed-types', () => {
     const jn = makeWithNumbers()
 
     // Numbers and strings coexist
-    expect(jn('a=1\nb=hello\nc=2.5\nd=true'))
-      .equal({ a: 1, b: 'hello', c: 2.5, d: true })
+    assert.deepEqual(jn('a=1\nb=hello\nc=2.5\nd=true'),
+      { a: 1, b: 'hello', c: 2.5, d: true })
 
     // Non-numeric strings stay as strings
-    expect(jn('a=1abc')).equal({ a: '1abc' })
+    assert.deepEqual(jn('a=1abc'), { a: '1abc' })
 
     // Empty value stays as empty string
-    expect(jn('a=\nb=1')).equal({ a: '', b: 1 })
+    assert.deepEqual(jn('a=\nb=1'), { a: '', b: 1 })
   })
 
   test('in-sections', () => {
     const jn = makeWithNumbers()
 
-    expect(jn('[s]\na=42\nb=text'))
-      .equal({ s: { a: 42, b: 'text' } })
+    assert.deepEqual(jn('[s]\na=42\nb=text'),
+      { s: { a: 42, b: 'text' } })
 
-    expect(jn('[s]\na=1\n[t]\nb=2'))
-      .equal({ s: { a: 1 }, t: { b: 2 } })
+    assert.deepEqual(jn('[s]\na=1\n[t]\nb=2'),
+      { s: { a: 1 }, t: { b: 2 } })
   })
 
   test('arrays', () => {
     const jn = makeWithNumbers()
 
-    expect(jn('a[]=1\na[]=2\na[]=hello'))
-      .equal({ a: [1, 2, 'hello'] })
+    assert.deepEqual(jn('a[]=1\na[]=2\na[]=hello'),
+      { a: [1, 2, 'hello'] })
   })
 
   test('default-numbers-are-strings', () => {
     // Without number.lex, all values are strings
     const j = Jsonic.make().use(Ini)
 
-    expect(j('a=1')).equal({ a: '1' })
-    expect(j('a=2.5')).equal({ a: '2.5' })
-    expect(j('a=-3')).equal({ a: '-3' })
-    expect(j('a=0xFF')).equal({ a: '0xFF' })
+    assert.deepEqual(j('a=1'), { a: '1' })
+    assert.deepEqual(j('a=2.5'), { a: '2.5' })
+    assert.deepEqual(j('a=-3'), { a: '-3' })
+    assert.deepEqual(j('a=0xFF'), { a: '0xFF' })
   })
 })
