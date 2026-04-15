@@ -1,12 +1,4 @@
-github.com/jsonicjs/hoover/go v0.1.2 h1:lC9PQGsTpzwJNpV7fWFLTxrGpSLyOFDg+mnk5ErUBQw=
-github.com/jsonicjs/hoover/go v0.1.2/go.mod h1:pLIfqcCpHvqcp53UFieKZ6leaeVAfNTe/eXK+86D5mY=
-github.com/jsonicjs/jsonic/go v0.1.6 h1:oUw4vxCK6tqa7SGN87vjCtx3sCpeHXdqfl25hx5LKP0=
-github.com/jsonicjs/jsonic/go v0.1.6/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
-github.com/jsonicjs/jsonic/go v0.1.13-0.20260412163234-7d968a3fa474 h1:jST6+WLXT7utj/AhS9rtOnVeGHvg2w5cqBijY31PJ14=
-github.com/jsonicjs/jsonic/go v0.1.13-0.20260412163234-7d968a3fa474/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
-github.com/jsonicjs/jsonic/go v0.1.13-0.20260412213517-37ffed6e0b00 h1:jEvbomzt1jsnIp18/p1Tgs4qFd0EJ110xpp9dsoxTYk=
-github.com/jsonicjs/jsonic/go v0.1.13-0.20260412213517-37ffed6e0b00/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
-github.com/jsonicjs/jsonic/go v0.1.13 h1:1c6S2I5eTBwcQuiOKX757ncekt5D6foErLftxA1LZ2U=
-github.com/jsonicjs/jsonic/go v0.1.13/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
-github.com/jsonicjs/jsonic/go v0.1.15 h1:gky2G3ZYM12+7R4TgQNKaM42C33DDdtRs4xdde/PKqU=
-github.com/jsonicjs/jsonic/go v0.1.15/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=
+github.com/jsonicjs/hoover/go v0.1.3 h1:hHoZH3K/q90QvyiB4fV/H4mbsBJPXsBRf4yuu8MSZCo=
+github.com/jsonicjs/hoover/go v0.1.3/go.mod h1:4WprQgmu+Aiu1a5oYYgx5TQJR49kZ1G97mX4y+QFjww=
+github.com/jsonicjs/jsonic/go v0.1.17 h1:iujH8XN2ClzY+xfEtkYC5ns9AEZSAi7bl4IPP0/YgoI=
+github.com/jsonicjs/jsonic/go v0.1.17/go.mod h1:ObNKlCG7esWoi4AHCpdgkILvPINV8bpvkbCd4llGGUg=

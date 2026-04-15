@@ -1,0 +1,4 @@
+input	expected
+a[]=1\na[]=2	{"a":["1","2"]}
+zr[] = deedee	{"zr":["deedee"]}
+ar[] = one\nar[] = three\nar   = this is included	{"ar":["one","three","this is included"]}

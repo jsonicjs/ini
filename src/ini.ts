@@ -158,8 +158,9 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
     lex: {
       order: 8.5e6,
     },
-    block: {
-      endofline: {
+    block: [
+      {
+        name: 'endofline',
         start: {
           rule: {
             parent: {
@@ -177,7 +178,8 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
         preserveEscapeChar: true,
         trim: true,
       },
-      key: {
+      {
+        name: 'key',
         token: '#HK',
         start: {
           rule: {
@@ -194,7 +196,8 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
         escape: keyEscape,
         trim: true,
       },
-      divekey: {
+      {
+        name: 'divekey',
         token: '#DK',
         start: {
           rule: {
@@ -216,7 +219,7 @@ function Ini(jsonic: Jsonic, _options: IniOptions) {
         allowUnknownEscape: true,
         trim: true,
       },
-    },
+    ],
   })
 
   const dupSection = _options.section?.duplicate || 'merge'

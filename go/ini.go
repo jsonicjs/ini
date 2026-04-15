@@ -3,9 +3,11 @@
 package ini
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	hoover "github.com/jsonicjs/hoover/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
@@ -134,7 +136,9 @@ func MakeJsonic(opts ...IniOptions) *jsonic.Jsonic {
 	j := jsonic.Make(jopts)
 
 	pluginMap := optionsToMap(&o, r)
-	j.Use(iniPlugin, pluginMap)
+	if err := iniPlugin(j, pluginMap); err != nil {
+		panic("ini plugin: " + err.Error())
+	}
 
 	return j
 }
@@ -214,8 +218,36 @@ const grammarText = `
 // --- END EMBEDDED ini-grammar.jsonic ---
 
 // iniPlugin is the jsonic plugin that adds INI parsing support.
-func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
+func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) error {
 	opts := mapToResolved(pluginOpts)
+
+	// Resolve inline comment options for Hoover block config.
+	inlineCharsInFixed := opts.inlineActive && !opts.escWhitespace
+
+	// Build Hoover end.fixed arrays based on inline comment config.
+	eolEndFixed := []string{"\n", "\r\n"}
+	if inlineCharsInFixed {
+		eolEndFixed = append(eolEndFixed, opts.inlineCharStr...)
+	}
+	eolEndFixed = append(eolEndFixed, "")
+
+	keyEndFixed := []string{"=", "\n", "\r\n"}
+	if inlineCharsInFixed {
+		keyEndFixed = append(keyEndFixed, opts.inlineCharStr...)
+	}
+	keyEndFixed = append(keyEndFixed, "")
+
+	// Build escape maps.
+	eolEscape := map[string]string{"\\": "\\"}
+	keyEscape := map[string]string{"\\": "\\"}
+	if opts.inlineActive && opts.escBackslash {
+		for _, ch := range opts.inlineCharStr {
+			eolEscape[ch] = ch
+			keyEscape[ch] = ch
+		}
+	}
+
+	bTrue := true
 
 	cfg := j.Config()
 
@@ -230,369 +262,228 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	j.Token("#DOT", ".")
 	cfg.SortFixedTokens()
 
-	// Register custom token types used by matchers.
-	HK := j.Token("#HK") // Hoover Key
-	HV := j.Token("#HV") // Hoover Value
-	DK := j.Token("#DK") // Dive Key (section path part)
-	ST := j.Token("#ST") // String
-	OS := j.Token("#OS") // [
-	CS := j.Token("#CS") // ]
+	// Use Hoover plugin for key, value, and dive key matching.
+	// Mirrors the TS: jsonic.use(Hoover, { ... })
+	err := j.UseDefaults(hoover.Hoover, hoover.Defaults, map[string]any{
+		"lex": map[string]any{
+			"order": 8500000,
+		},
+		"block": []*hoover.Block{
+			{
+				Name: "endofline",
+				Start: hoover.StartSpec{
+					Rule: &hoover.HooverRuleSpec{
+						Parent: &hoover.HooverRuleFilter{
+							Include: []string{"pair", "elem"},
+						},
+					},
+				},
+				End: hoover.EndSpec{
+					Fixed:   eolEndFixed,
+					Consume: []string{"\n", "\r\n"},
+				},
+				EscapeChar:         "\\",
+				Escape:             eolEscape,
+				AllowUnknownEscape: &bTrue,
+				PreserveEscapeChar: true,
+				Trim:               true,
+			},
+			{
+				Name:  "key",
+				Token: "#HK",
+				Start: hoover.StartSpec{
+					Rule: &hoover.HooverRuleSpec{
+						Current: &hoover.HooverRuleFilter{
+							Exclude: []string{"dive"},
+						},
+						State: "oc",
+					},
+				},
+				End: hoover.EndSpec{
+					Fixed:   keyEndFixed,
+					Consume: false,
+				},
+				Escape: keyEscape,
+				Trim:   true,
+			},
+			{
+				Name:  "divekey",
+				Token: "#DK",
+				Start: hoover.StartSpec{
+					Rule: &hoover.HooverRuleSpec{
+						Current: &hoover.HooverRuleFilter{
+							Include: []string{"dive"},
+						},
+					},
+				},
+				End: hoover.EndSpec{
+					Fixed:   []string{"]", "."},
+					Consume: false,
+				},
+				EscapeChar:         "\\",
+				Escape:             map[string]string{"]": "]", ".": ".", "\\": "\\"},
+				AllowUnknownEscape: &bTrue,
+				Trim:               true,
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to use hoover plugin: %w", err)
+	}
+
+	// Token references for val rule.
+	ST := j.Token("#ST")
+	OS := j.Token("#OS")
+	CS := j.Token("#CS")
+	HV := j.Token("#HV")
 	ZZ := j.Token("#ZZ")
 
-	// Ensure these exist for grammar file token resolution.
-	j.Token("#VL")
-	j.Token("#CL")
+	// Custom multiline value matcher.
+	// Needed when: (a) multiline continuation is enabled, or
+	// (b) inline comments are active with whitespace-prefix detection.
+	// Runs at higher priority than Hoover (8.5e6) to intercept values first.
+	// Mirrors the TS: jsonic.options({ lex: { match: { multiline: { order: 8.4e6, ... } } } })
+	needCustomMatcher := opts.multiline || (opts.inlineActive && opts.escWhitespace)
 
-	// Exclude default jsonic grammar rules.
-	j.Exclude("jsonic", "imp")
-
-	// Set start rule.
-	cfg.RuleStart = "ini"
-
-	// Disable text lexing (we handle it with custom matchers).
-	cfg.TextLex = false
-
-	// Add = to ender chars so the built-in matchers don't consume past it.
-	if cfg.EnderChars == nil {
-		cfg.EnderChars = make(map[rune]bool)
-	}
-	cfg.EnderChars['='] = true
-	cfg.EnderChars['['] = true
-	cfg.EnderChars[']'] = true
-	cfg.EnderChars['.'] = true
-
-	// ---- Custom Matchers ----
-	// Context is determined from the current rule (like TS Hoover), not
-	// from a mutable mode variable. This keeps the matchers stateless and
-	// lets the grammar file drive all rule definitions without Go-specific
-	// action wrappers.
-
-	// Key matcher: reads a key token (until =, newline, [, ], or EOF).
-	// Fires when the current rule is NOT "dive" and NOT in value context
-	// (parent rule is not "pair"), matching Hoover's key block conditions:
-	//   start.rule.current.exclude: ['dive'], state: 'oc'
-	j.AddMatcher("inikey", 100000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
-		if rule != nil {
-			if rule.Name == "dive" {
-				return nil
-			}
-			if rule.Parent != nil && rule.Parent.Name == "pair" {
-				return nil
-			}
-		}
-
-		pnt := lex.Cursor()
-		src := lex.Src
-		sI := pnt.SI
-		if sI >= pnt.Len {
-			return nil
-		}
-
-		// Pass through to built-in matchers for non-key chars.
-		ch := src[sI]
-		if ch == '=' || ch == '.' ||
-			ch == '#' || ch == ';' ||
-			ch == '"' || ch == '\'' ||
-			ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
-			return nil
-		}
-		if ch == '[' {
-			return nil
-		}
-		if ch == ']' {
-			return nil
-		}
-
-		startI := sI
-		for sI < pnt.Len {
-			c := src[sI]
-			if c == '=' || c == '\n' || c == '\r' {
-				break
-			}
-			// Allow [] in key for array syntax.
-			if c == '[' {
-				if sI+1 < pnt.Len && src[sI+1] == ']' {
-					sI += 2
-					continue
+	if needCustomMatcher {
+		makeMultilineMatcher := func(cfg *jsonic.LexConfig, _opts *jsonic.Options) jsonic.LexMatcher {
+			return func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
+				// Only match in value context (same as Hoover endofline block).
+				if rule == nil || rule.Parent == nil ||
+					(rule.Parent.Name != "pair" && rule.Parent.Name != "elem") {
+					return nil
 				}
-				break
-			}
-			if c == ']' {
-				break
-			}
-			// Inline comment chars in key position.
-			if opts.inlineActive && opts.inlineChars[rune(c)] {
-				break
-			}
-			// Escape handling in keys.
-			if c == '\\' && sI+1 < pnt.Len {
-				next := src[sI+1]
-				if next == '.' || next == ']' || next == '[' || next == '\\' {
-					sI += 2
-					continue
+				if rule.State != "o" {
+					return nil
 				}
-				if opts.inlineActive && opts.escBackslash && opts.inlineChars[rune(next)] {
-					sI += 2
-					continue
-				}
-			}
-			sI++
-		}
 
-		if sI == startI {
-			return nil
-		}
+				pnt := lex.Cursor()
+				src := lex.Src
+				sI := pnt.SI
+				rI := pnt.RI
+				cI := pnt.CI
+				startI := sI
+				var chars []byte
 
-		raw := src[startI:sI]
-		val := processKeyEscapes(strings.TrimSpace(raw))
+				for sI < len(src) {
+					c := src[sI]
 
-		tkn := lex.Token("#HK", HK, val, raw)
-		pnt.SI = sI
-		pnt.CI += sI - startI
-		return tkn
-	})
-
-	// Value matcher: reads a value token (until newline, comment, or EOF).
-	// Fires when the parent rule is "pair" (value context), matching
-	// Hoover's endofline block condition: start.rule.parent.include: ['pair', 'elem']
-	j.AddMatcher("inival", 100001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
-		if rule == nil || rule.Parent == nil ||
-			(rule.Parent.Name != "pair" && rule.Parent.Name != "elem") {
-			return nil
-		}
-
-		pnt := lex.Cursor()
-		src := lex.Src
-		sI := pnt.SI
-		rI := pnt.RI
-		cI := pnt.CI
-		if sI >= pnt.Len {
-			// EOF: empty value.
-			return nil
-		}
-
-		// Skip leading whitespace (since we run before the space matcher).
-		for sI < pnt.Len && (src[sI] == ' ' || src[sI] == '\t') {
-			sI++
-			cI++
-		}
-
-		// Check for immediate newline → empty value.
-		if sI >= pnt.Len || src[sI] == '\n' || src[sI] == '\r' {
-			// Consume the newline if present.
-			if sI < pnt.Len {
-				if src[sI] == '\r' && sI+1 < pnt.Len && src[sI+1] == '\n' {
-					sI += 2
-				} else {
-					sI++
-				}
-				rI++
-				cI = 1
-			}
-			tkn := lex.Token("#HV", HV, "", src[pnt.SI:sI])
-			pnt.SI = sI
-			pnt.RI = rI
-			pnt.CI = cI
-			return tkn
-		}
-
-		// Check for line-start comment chars → empty value.
-		ch := src[sI]
-		if ch == '#' || ch == ';' {
-			tkn := lex.Token("#HV", HV, "", src[pnt.SI:sI])
-			pnt.SI = sI
-			pnt.RI = rI
-			pnt.CI = cI
-			return tkn
-		}
-
-		// Don't match at quotes (let string matcher handle them).
-		if ch == '"' || ch == '\'' {
-			// Advance past the whitespace we skipped.
-			pnt.SI = sI
-			pnt.CI = cI
-			return nil
-		}
-		// Don't match at [ or ] (let fixed token matcher handle them).
-		if ch == '[' || ch == ']' {
-			pnt.SI = sI
-			pnt.CI = cI
-			return nil
-		}
-
-		startI := pnt.SI // Include leading whitespace in src
-		var chars []byte
-
-		for sI < pnt.Len {
-			c := src[sI]
-
-			// Check for inline comment characters.
-			if opts.inlineActive && opts.inlineChars[rune(c)] {
-				if opts.escWhitespace {
-					// Only treat as comment if preceded by whitespace.
-					if len(chars) > 0 && (chars[len(chars)-1] == ' ' || chars[len(chars)-1] == '\t') {
+					// Check for inline comment characters.
+					if opts.inlineActive && opts.inlineChars[rune(c)] {
+						if opts.escWhitespace {
+							// Only treat as comment if preceded by whitespace.
+							if len(chars) > 0 && (chars[len(chars)-1] == ' ' || chars[len(chars)-1] == '\t') {
+								break
+							}
+							chars = append(chars, c)
+							sI++
+							cI++
+							continue
+						}
 						break
 					}
-					// Not preceded by whitespace: treat as literal.
+
+					// Check for backslash continuation before newline.
+					if opts.continuation != "" && c == opts.continuation[0] {
+						if sI+1 < len(src) && src[sI+1] == '\n' {
+							sI += 2
+							rI++
+							cI = 1
+							for sI < len(src) && (src[sI] == ' ' || src[sI] == '\t') {
+								sI++
+								cI++
+							}
+							continue
+						}
+						if sI+2 < len(src) && src[sI+1] == '\r' && src[sI+2] == '\n' {
+							sI += 3
+							rI++
+							cI = 1
+							for sI < len(src) && (src[sI] == ' ' || src[sI] == '\t') {
+								sI++
+								cI++
+							}
+							continue
+						}
+					}
+
+					// Check for newline.
+					if c == '\n' || (c == '\r' && sI+1 < len(src) && src[sI+1] == '\n') {
+						// Indent continuation.
+						if opts.indent {
+							var nextI int
+							if c == '\r' {
+								nextI = sI + 2
+							} else {
+								nextI = sI + 1
+							}
+							if nextI < len(src) && (src[nextI] == ' ' || src[nextI] == '\t') {
+								rI++
+								cI = 1
+								sI = nextI
+								for sI < len(src) && (src[sI] == ' ' || src[sI] == '\t') {
+									sI++
+									cI++
+								}
+								chars = append(chars, ' ')
+								continue
+							}
+						}
+						// Normal newline: end value and consume.
+						if c == '\r' {
+							sI += 2
+						} else {
+							sI++
+						}
+						rI++
+						cI = 1
+						break
+					}
+
+					// Handle escape sequences.
+					if c == '\\' && sI+1 < len(src) {
+						next := src[sI+1]
+						if opts.inlineActive && opts.escBackslash && opts.inlineChars[rune(next)] {
+							chars = append(chars, next)
+							sI += 2
+							cI += 2
+							continue
+						}
+						if next == '\\' {
+							chars = append(chars, '\\')
+							sI += 2
+							cI += 2
+							continue
+						}
+					}
+
 					chars = append(chars, c)
 					sI++
 					cI++
-					continue
 				}
-				break
+
+				valStr := strings.TrimSpace(string(chars))
+				val := resolveValue(valStr)
+
+				tkn := lex.Token("#HV", HV, val, src[startI:sI])
+				pnt.SI = sI
+				pnt.RI = rI
+				pnt.CI = cI
+				return tkn
 			}
-
-			// Check for backslash continuation before newline.
-			if opts.multiline && opts.continuation != "" && c == opts.continuation[0] {
-				if sI+1 < pnt.Len && src[sI+1] == '\n' {
-					sI += 2
-					rI++
-					cI = 1
-					for sI < pnt.Len && (src[sI] == ' ' || src[sI] == '\t') {
-						sI++
-						cI++
-					}
-					continue
-				}
-				if sI+2 < pnt.Len && src[sI+1] == '\r' && src[sI+2] == '\n' {
-					sI += 3
-					rI++
-					cI = 1
-					for sI < pnt.Len && (src[sI] == ' ' || src[sI] == '\t') {
-						sI++
-						cI++
-					}
-					continue
-				}
-			}
-
-			// Check for newline.
-			if c == '\n' || (c == '\r' && sI+1 < pnt.Len && src[sI+1] == '\n') {
-				// Indent continuation.
-				if opts.multiline && opts.indent {
-					var nextI int
-					if c == '\r' {
-						nextI = sI + 2
-					} else {
-						nextI = sI + 1
-					}
-					if nextI < pnt.Len && (src[nextI] == ' ' || src[nextI] == '\t') {
-						rI++
-						cI = 1
-						sI = nextI
-						for sI < pnt.Len && (src[sI] == ' ' || src[sI] == '\t') {
-							sI++
-							cI++
-						}
-						chars = append(chars, ' ')
-						continue
-					}
-				}
-
-				// Normal newline: end value and consume it.
-				if c == '\r' {
-					sI += 2
-				} else {
-					sI++
-				}
-				rI++
-				cI = 1
-				break
-			}
-
-			// Bare \r without \n.
-			if c == '\r' {
-				sI++
-				rI++
-				cI = 1
-				break
-			}
-
-			// Handle escape sequences.
-			if c == '\\' && sI+1 < pnt.Len {
-				next := src[sI+1]
-				if opts.inlineActive && opts.escBackslash && opts.inlineChars[rune(next)] {
-					chars = append(chars, next)
-					sI += 2
-					cI += 2
-					continue
-				}
-				if next == '\\' {
-					chars = append(chars, '\\')
-					sI += 2
-					cI += 2
-					continue
-				}
-			}
-
-			chars = append(chars, c)
-			sI++
-			cI++
 		}
 
-		valStr := strings.TrimSpace(string(chars))
-		val := resolveValue(valStr)
-
-		tkn := lex.Token("#HV", HV, val, src[startI:sI])
-		pnt.SI = sI
-		pnt.RI = rI
-		pnt.CI = cI
-		return tkn
-	})
-
-	// Dive key matcher: reads section path parts (until ] or .).
-	// Fires only when the current rule is "dive", matching Hoover's
-	// divekey block condition: start.rule.current.include: ['dive']
-	j.AddMatcher("inidive", 100002, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
-		if rule == nil || rule.Name != "dive" {
-			return nil
-		}
-
-		pnt := lex.Cursor()
-		src := lex.Src
-		sI := pnt.SI
-		if sI >= pnt.Len {
-			return nil
-		}
-
-		// Pass through for fixed tokens and whitespace.
-		ch := src[sI]
-		if ch == ']' || ch == '.' || ch == '[' ||
-			ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
-			return nil
-		}
-
-		startI := sI
-		for sI < pnt.Len {
-			c := src[sI]
-			if c == ']' || c == '.' {
-				break
-			}
-			if c == '\n' || c == '\r' {
-				break
-			}
-			if c == '\\' && sI+1 < pnt.Len {
-				next := src[sI+1]
-				if next == ']' || next == '.' || next == '\\' {
-					sI += 2
-					continue
-				}
-			}
-			sI++
-		}
-
-		if sI == startI {
-			return nil
-		}
-
-		raw := src[startI:sI]
-		val := processDiveEscapes(strings.TrimSpace(raw))
-
-		tkn := lex.Token("#DK", DK, val, raw)
-		pnt.SI = sI
-		pnt.CI += sI - startI
-		return tkn
-	})
+		j.SetOptions(jsonic.Options{
+			Lex: &jsonic.LexOptions{
+				Match: map[string]*jsonic.MatchSpec{
+					"multiline": {
+						Order: 8400000, // Lower than Hoover (8.5e6), runs first.
+						Make:  makeMultilineMatcher,
+					},
+				},
+			},
+		})
+	}
 
 	// ---- Grammar Rules ----
 	// Rules ini, table, dive, map, pair are loaded from ini-grammar.jsonic
@@ -675,6 +566,20 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 			}
 		}),
 
+		// Propagate child dive array up when dive rule closes.
+		// In TS, push() mutates the shared array in place, but Go's append
+		// may create a new backing array, leaving parent references stale.
+		"@dive-bc": jsonic.StateAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
+			if r.Child != nil && r.Child != jsonic.NoRule {
+				if dive, ok := r.Child.U["dive"].([]string); ok {
+					r.U["dive"] = dive
+					if r.Parent != nil && r.Parent != jsonic.NoRule {
+						r.Parent.U["dive"] = dive
+					}
+				}
+			}
+		}),
+
 		"@pair-key-eq": jsonic.AltAction(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			key := tokenString(r.O0)
 			nodeMap, _ := r.Node.(map[string]any)
@@ -683,6 +588,7 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 			}
 
 			if _, isArr := nodeMap[key].([]any); isArr {
+				r.U["key"] = key
 				r.U["ini_array"] = nodeMap[key]
 			} else if len(key) > 2 && strings.HasSuffix(key, "[]") {
 				arrayKey := key[:len(key)-2]
@@ -736,39 +642,85 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 	parser := jsonic.Make()
 	parsed, err := parser.Parse(grammarText)
 	if err != nil {
-		panic("failed to parse ini grammar: " + err.Error())
+		return fmt.Errorf("failed to parse ini grammar: %w", err)
 	}
-	grammarDef := mapToGrammarSpec(parsed.(map[string]any), refs)
+	parsedMap := parsed.(map[string]any)
+
+	// Build GrammarSpec with both options and rules from the grammar text.
+	grammarDef := &jsonic.GrammarSpec{
+		Ref: refs,
+	}
+	if optionsMap, ok := parsedMap["options"].(map[string]any); ok {
+		// Override string.chars placeholder with actual quote chars.
+		if strOpts, ok := optionsMap["string"].(map[string]any); ok {
+			strOpts["chars"] = `'"`
+		}
+		// Remove entries handled directly in Go code.
+		// - line.check: set via cfg.LineCheck above.
+		// - comment.def: grammar text has partial overrides (e.g. hash: {eatline:true})
+		//   but Go's SetOptions replaces entire comment config, so keep jopts setup.
+		// - fixed.token: not handled by MapToOptions, handled manually above.
+		delete(optionsMap, "line")
+		delete(optionsMap, "comment")
+		delete(optionsMap, "fixed")
+		grammarDef.OptionsMap = optionsMap
+	}
+	if ruleMap, ok := parsedMap["rule"].(map[string]any); ok {
+		grammarDef.Rule = convertRuleMap(ruleMap)
+	}
 	if err := j.Grammar(grammarDef); err != nil {
-		panic("failed to apply ini grammar: " + err.Error())
+		return fmt.Errorf("failed to apply ini grammar: %w", err)
+	}
+
+	// Line check: skip line matching inside val rule (matches TS @line-check).
+	// Set after Grammar() to ensure it's not overwritten by SetOptions.
+	cfg.LineCheck = func(lex *jsonic.Lex) *jsonic.LexCheckResult {
+		if lex.Ctx != nil && lex.Ctx.Rule != nil && lex.Ctx.Rule.Name == "val" {
+			return &jsonic.LexCheckResult{Done: true, Token: nil}
+		}
+		return nil
 	}
 
 	// ---- val rule ----
-	// Defined in Go code: needs custom open alts and complex AC handler
-	// not expressible in the declarative grammar file.
+	// Mirrors TS: rs.fnref(refs).open([...], { custom: filter })
+	// Prepends INI-specific alts, filters out json/list group alts,
+	// and preserves hoover's prepended #HV alt.
 	j.Rule("val", func(rs *jsonic.RuleSpec) {
-		rs.Clear()
-
 		rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			r.Node = jsonic.Undefined
 		})
 
-		rs.Open = []*jsonic.AltSpec{
+		HK := j.Token("#HK")
+		DK := j.Token("#DK")
+
+		// Filter out json,list group alts (matching TS custom filter)
+		// and hoover-prepended #HK/#DK alts that don't belong in val.
+		filtered := make([]*jsonic.AltSpec, 0, len(rs.Open))
+		for _, alt := range rs.Open {
+			if alt.G == "json,list" {
+				continue
+			}
+			// Skip hoover-prepended alts for non-value tokens.
+			if len(alt.S) == 1 && len(alt.S[0]) == 1 &&
+				(alt.S[0][0] == HK || alt.S[0][0] == DK) {
+				continue
+			}
+			filtered = append(filtered, alt)
+		}
+
+		// Prepend INI-specific alts before existing (hoover) alts.
+		iniAlts := []*jsonic.AltSpec{
 			// Bracket chars at start of value: concat with next value.
-			{S: [][]jsonic.Tin{{OS}}, R: "val",
+			// OS and CS are alternatives for the same slot (matching TS ['#OS #CS']).
+			{S: [][]jsonic.Tin{{OS, CS}}, R: "val",
 				U: map[string]any{"ini_prev": true}},
-			{S: [][]jsonic.Tin{{CS}}, R: "val",
-				U: map[string]any{"ini_prev": true}},
-			// String value.
-			{S: [][]jsonic.Tin{{ST}}},
-			// Hoover value (unquoted text).
-			{S: [][]jsonic.Tin{{HV}}},
 			// End of input: empty value.
 			{S: [][]jsonic.Tin{{ZZ}},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					r.Node = ""
 				}},
 		}
+		rs.Open = append(iniAlts, filtered...)
 
 		rs.AddAC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			// Resolve value.
@@ -823,6 +775,8 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) {
 			}
 		})
 	})
+
+	return nil
 }
 
 // ---- Helper functions ----
@@ -923,53 +877,11 @@ func resolveTokenVal(t *jsonic.Token) any {
 	return t.Src
 }
 
-func processKeyEscapes(s string) string {
-	if !strings.ContainsRune(s, '\\') {
-		return s
-	}
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) {
-			next := s[i+1]
-			if next == '.' || next == ']' || next == '[' || next == '\\' {
-				b.WriteByte(next)
-				i++
-				continue
-			}
-		}
-		b.WriteByte(s[i])
-	}
-	return b.String()
-}
-
-func processDiveEscapes(s string) string {
-	if !strings.ContainsRune(s, '\\') {
-		return s
-	}
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\\' && i+1 < len(s) {
-			next := s[i+1]
-			if next == ']' || next == '.' || next == '\\' {
-				b.WriteByte(next)
-				i++
-				continue
-			}
-		}
-		b.WriteByte(s[i])
-	}
-	return b.String()
-}
 
 func tryParseJSON(s string) any {
-	trimmed := strings.TrimSpace(s)
-	switch trimmed {
-	case "true":
-		return true
-	case "false":
-		return false
-	case "null":
-		return nil
+	var result any
+	if err := json.Unmarshal([]byte(s), &result); err == nil {
+		return result
 	}
 	return s
 }
@@ -994,21 +906,9 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-// mapToGrammarSpec converts a parsed grammar map (from jsonic.Parse of the
-// grammar file) into a typed GrammarSpec. Only the "rule" section is used;
-// options are set separately via MakeJsonic since the grammar file's options
-// are TS-specific.
-func mapToGrammarSpec(parsed map[string]any, ref map[jsonic.FuncRef]any) *jsonic.GrammarSpec {
-	gs := &jsonic.GrammarSpec{
-		Ref: ref,
-	}
-
-	ruleMap, _ := parsed["rule"].(map[string]any)
-	if ruleMap == nil {
-		return gs
-	}
-
-	gs.Rule = make(map[string]*jsonic.GrammarRuleSpec, len(ruleMap))
+// convertRuleMap converts a parsed rule map into typed GrammarRuleSpec map.
+func convertRuleMap(ruleMap map[string]any) map[string]*jsonic.GrammarRuleSpec {
+	rules := make(map[string]*jsonic.GrammarRuleSpec, len(ruleMap))
 	for name, rDef := range ruleMap {
 		rd, ok := rDef.(map[string]any)
 		if !ok {
@@ -1021,10 +921,9 @@ func mapToGrammarSpec(parsed map[string]any, ref map[jsonic.FuncRef]any) *jsonic
 		if closeDef, ok := rd["close"]; ok {
 			grs.Close = convertAlts(closeDef)
 		}
-		gs.Rule[name] = grs
+		rules[name] = grs
 	}
-
-	return gs
+	return rules
 }
 
 func convertAlts(def any) any {

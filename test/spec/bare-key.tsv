@@ -1,0 +1,4 @@
+input	expected
+a=1\nmykey	{"a":"1","mykey":true}
+a = true\nb = false	{"a":true,"b":false}
+a = null	{"a":null}
