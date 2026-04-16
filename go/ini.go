@@ -2,8 +2,6 @@
 
 package ini
 
-const Version = "0.7.0"
-
 import (
 	"encoding/json"
 	"fmt"
@@ -12,6 +10,8 @@ import (
 	hoover "github.com/jsonicjs/hoover/go"
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
+
+const Version = "0.1.3"
 
 // IniOptions configures the INI parser.
 type IniOptions struct {
