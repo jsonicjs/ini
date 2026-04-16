@@ -2,6 +2,8 @@
 
 package ini
 
+const Version = "0.7.0"
+
 import (
 	"encoding/json"
 	"fmt"
