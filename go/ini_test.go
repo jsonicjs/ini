@@ -3,9 +3,7 @@
 package ini
 
 import (
-	"os"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -17,27 +15,6 @@ func assert(t *testing.T, name string, got, want any) {
 	}
 }
 
-func TestDependencyVersions(t *testing.T) {
-	modData, err := os.ReadFile("go.mod")
-	if err != nil {
-		t.Fatal(err)
-	}
-	sumData, err := os.ReadFile("go.sum")
-	if err != nil {
-		t.Fatal(err)
-	}
-	combined := string(modData) + "\n" + string(sumData)
-
-	// Check jsonic version is 0.1.17
-	if !strings.Contains(combined, "github.com/jsonicjs/jsonic/go v0.1.17") {
-		t.Errorf("expected jsonic version v0.1.17, not found in go.mod or go.sum")
-	}
-
-	// Check hoover version is 0.1.3
-	if !strings.Contains(combined, "github.com/jsonicjs/hoover/go v0.1.3") {
-		t.Errorf("expected hoover version v0.1.3, not found in go.mod or go.sum")
-	}
-}
 
 func TestHappy(t *testing.T) {
 	j := MakeJsonic()
