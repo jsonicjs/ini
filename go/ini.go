@@ -11,7 +11,7 @@ import (
 	jsonic "github.com/jsonicjs/jsonic/go"
 )
 
-const Version = "0.1.4"
+const Version = "0.1.5"
 
 // IniOptions configures the INI parser.
 type IniOptions struct {
