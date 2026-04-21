@@ -687,7 +687,7 @@ func iniPlugin(j *jsonic.Jsonic, pluginOpts map[string]any) error {
 	// Mirrors TS: rs.fnref(refs).open([...], { custom: filter })
 	// Prepends INI-specific alts, filters out json/list group alts,
 	// and preserves hoover's prepended #HV alt.
-	j.Rule("val", func(rs *jsonic.RuleSpec) {
+	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBO(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			r.Node = jsonic.Undefined
 		})
